@@ -1,7 +1,7 @@
 {
   "schema_version": "1.0.0",
-  "revision": 5,
-  "updated_at": "2026-08-05T15:27:20.789805Z",
+  "revision": 6,
+  "updated_at": "2026-08-05T15:40:00Z",
   "run": {
     "run_id": "R-20260805T152457Z-001279",
     "previous_run_id": null,
@@ -12,7 +12,7 @@
     "dirty_shutdown": false
   },
   "objective": {
-    "system_generation": "G-0001",
+    "system_generation": "G-0002",
     "evidence_stage": "baseline",
     "active_hypothesis_id": "H-0001",
     "active_experiment_id": null,
@@ -57,26 +57,26 @@
     {
       "blocker_id": "B-0002",
       "severity": "high",
-      "status": "open",
+      "status": "resolved",
       "description": "EV-0001 measures the strategy from its second-session fill but measures the benchmark from the first-session open.",
       "owner": "skill-lifecycle-governance",
-      "next_check": "Request human approval for EV-0002 and generation G-0002 with aligned benchmark timing."
+      "next_check": "Reopen only if the EV-0002 regression test or E-0002 evidence review fails."
     }
   ],
   "next_actions": [
     {
-      "action_id": "A-0003",
+      "action_id": "A-0004",
       "priority": 1,
       "expected_information_gain": 1.0,
       "estimated_minutes": 20,
-      "skill": "skill-lifecycle-governance",
-      "description": "Propose EV-0002 and generation G-0002 with the benchmark entering on the strategy's first eligible execution session.",
-      "success_criterion": "Human approval and an ADR authorize the generation transition before sealed files change.",
+      "skill": "experiment-loop",
+      "description": "Preregister and execute E-0002 using EV-0002 against D-0001.",
+      "success_criterion": "Independent review confirms strategy and benchmark begin at the same evaluation start and all artifacts reconcile.",
       "prerequisites": ["E-0001"]
     }
   ],
   "handoff": {
-    "summary": "E-0001 finalized as block: Benchmark and strategy use different entry clocks, so excess return is not decision-valid.",
+    "summary": "G-0002 and EV-0002 were authorized and staged; E-0002 is the next executable action.",
     "last_verified_artifacts": [
       "results/E-0001/metrics.json",
       "results/E-0001/validity.json",
@@ -86,12 +86,11 @@
       "results/E-0001/artifact-manifest.json",
       "results/E-0001/review.json"
     ],
-    "next_action_id": "A-0003",
+    "next_action_id": "A-0004",
     "unresolved_risks": [
       "No baseline strategy",
       "No paper account",
-      "Distributions are excluded from D-0001",
-      "EV-0001 benchmark and strategy entry clocks are misaligned"
+      "Distributions are excluded from D-0001"
     ]
   },
   "integrity": {

@@ -76,15 +76,15 @@ python scripts/validate_repository.py
 
 The standard library is sufficient for the initial skeleton.
 
-## EV-0001 Experiment Pipeline
+## EV-0002 Experiment Pipeline
 
 After validating data, universe, cost, and risk records:
 
 ```bash
 python scripts/preregister_experiment.py \
   --hypothesis H-0001 \
-  --strategy S-0001 \
-  --strategy-entrypoint strategies/S-0001/strategy.py \
+  --strategy S-0002 \
+  --strategy-entrypoint strategies/S-0002/strategy.py \
   --title "Passive SPY baseline" \
   --rationale "Validate evaluator timing and accounting." \
   --prediction "The first fill occurs at the next session open." \
@@ -94,16 +94,16 @@ python scripts/preregister_experiment.py \
   --risk-policy R-0001 \
   --criterion "Artifacts reconcile and validation passes."
 
-python evaluator/daily_bar.py E-0001
+python evaluator/daily_bar.py E-0002
 
 # A different agent records the evidence review.
-python scripts/record_evidence_review.py E-0001 \
+python scripts/record_evidence_review.py E-0002 \
   --reviewer independent-reviewer \
   --decision keep \
-  --finding "Timing and accounting match EV-0001." \
+  --finding "Timing and accounting match EV-0002." \
   --next-action "Add a strategy-specific null baseline."
 
-python scripts/finalize_experiment.py E-0001 \
+python scripts/finalize_experiment.py E-0002 \
   --outcome keep \
   --reason "Baseline evaluator contract passed." \
   --next-action "Add a strategy-specific null baseline." \

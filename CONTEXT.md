@@ -40,6 +40,16 @@ One state in the evidence ladder: `bootstrap`, `baseline`, `discovery`,
 A preregistered set of criteria required to advance a strategy to the next
 evidence stage.
 
+### Evaluation start
+The first session on which a signal can be executed after the preregistered
+warm-up under the execution clock. Strategy and benchmark returns begin from
+this same session.
+
+### Warm-up
+The preregistered number of complete sessions used to build strategy history
+before the evaluator requests its first signal. Choosing cash after warm-up is
+an eligible strategy decision, not additional warm-up.
+
 ### Materialized state
 `STATE.json`, the compact current operating view. It is derived and replaceable,
 not the historical source of truth.
@@ -57,3 +67,4 @@ uncertain, and the single next executable action.
 - Do not use `test set` for market confirmation data.
 - Do not use `backtest result` without naming the evidence stage and data snapshot.
 - Do not use `profit` without stating whether it is gross, net, realized, or simulated.
+- Do not use `backtest start` when referring to return measurement; use `evaluation start`.

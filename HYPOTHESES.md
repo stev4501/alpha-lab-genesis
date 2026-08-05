@@ -26,6 +26,14 @@ but the benchmark clock must be aligned before this hypothesis can advance.
 - Preserved result: all execution and checksum artifacts remain immutable
 - Next action: request approval for `EV-0002` under `G-0002`
 
+#### G-0002 transition
+
+Human approval authorized `EV-0002` under `G-0002`. The evaluator now defines
+the evaluation start as the first session on which the initial signal can be
+executed after strategy-owned warm-up and begins the benchmark at that same
+open. `S-0002` is the versioned passive baseline with an explicit warm-up
+contract. `E-0001` remains immutable.
+
 ## Rejected
 
 None.

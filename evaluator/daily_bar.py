@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Sealed, long-only daily-bar evaluator with next-open execution."""
+"""EV-0002 sealed daily-bar evaluator with aligned benchmark timing."""
 
 from __future__ import annotations
 
@@ -21,6 +21,7 @@ from typing import Callable
 
 REQUIRED_COLUMNS = {"date", "symbol", "open", "high", "low", "close", "volume"}
 ANNUALIZATION = 252
+EVALUATOR_ID = "EV-0002"
 
 
 @dataclass(frozen=True)
@@ -51,7 +52,7 @@ def read_json(path: Path) -> dict:
         return json.load(handle)
 
 
-def load_strategy(path: Path) -> Callable:
+def load_strategy(path: Path) -> tuple[Callable, int]:
     spec = importlib.util.spec_from_file_location("alpha_lab_strategy", path)
     if spec is None or spec.loader is None:
         raise ValueError(f"Cannot load strategy: {path}")
@@ -60,7 +61,14 @@ def load_strategy(path: Path) -> Callable:
     strategy = getattr(module, "target_weights", None)
     if not callable(strategy):
         raise ValueError("Strategy must export callable target_weights(history, as_of).")
-    return strategy
+    warmup_sessions = getattr(module, "WARMUP_SESSIONS", None)
+    if (
+        not isinstance(warmup_sessions, int)
+        or isinstance(warmup_sessions, bool)
+        or warmup_sessions < 1
+    ):
+        raise ValueError("Strategy must define a positive integer WARMUP_SESSIONS.")
+    return strategy, warmup_sessions
 
 
 def load_bars(path: Path) -> tuple[list[str], dict[str, dict[str, dict]]]:
@@ -205,7 +213,7 @@ def calculate_metrics(
     benchmark_return: float,
 ) -> dict:
     equities = [row["equity"] for row in equity_rows]
-    daily_returns = [
+    daily_returns = [equities[0] / initial_capital - 1] + [
         equities[index] / equities[index - 1] - 1
         for index in range(1, len(equities))
         if equities[index - 1] != 0
@@ -226,7 +234,7 @@ def calculate_metrics(
         if len(daily_returns) >= 2 and statistics.stdev(daily_returns) > 0
         else None
     )
-    peak = equities[0]
+    peak = initial_capital
     max_drawdown = 0.0
     for value in equities:
         peak = max(peak, value)
@@ -254,6 +262,19 @@ def calculate_metrics(
     }
 
 
+def benchmark_interval(
+    dates: list[str],
+    bars_by_date: dict[str, dict[str, dict]],
+    benchmark_symbol: str,
+    warmup_sessions: int,
+) -> tuple[str, str, float]:
+    evaluation_start = dates[warmup_sessions]
+    evaluation_end = dates[-1]
+    start_open = bars_by_date[evaluation_start][benchmark_symbol]["open"]
+    end_close = bars_by_date[evaluation_end][benchmark_symbol]["close"]
+    return evaluation_start, evaluation_end, end_close / start_open - 1
+
+
 def write_csv(path: Path, rows: list[dict], fields: list[str]) -> None:
     with path.open("x", newline="", encoding="utf-8") as handle:
         writer = csv.DictWriter(handle, fieldnames=fields)
@@ -279,7 +300,7 @@ def evaluate(root: Path, experiment_id: str) -> dict:
         raise ValueError("Experiment must have an immutable preregistration.")
     if design["system_generation"] != core["system_generation"]:
         raise ValueError("Experiment generation does not match the sealed evaluator.")
-    if design["evaluator_id"] != "EV-0001":
+    if design["evaluator_id"] != EVALUATOR_ID:
         raise ValueError("Unsupported evaluator.")
     if not design["strategy_entrypoint"]:
         raise ValueError("strategy_entrypoint is required.")
@@ -287,6 +308,13 @@ def evaluate(root: Path, experiment_id: str) -> dict:
         raise ValueError("Data manifest changed after preregistration.")
     if len(design["dataset_ids"]) != 1:
         raise ValueError("Initial evaluator requires exactly one dataset.")
+    warmup_sessions = design["parameter_coordinates"].get("warmup_sessions")
+    if (
+        not isinstance(warmup_sessions, int)
+        or isinstance(warmup_sessions, bool)
+        or warmup_sessions < 1
+    ):
+        raise ValueError("A positive integer warmup_sessions must be preregistered.")
 
     dataset = next(
         (item for item in manifest["datasets"] if item["dataset_id"] == design["dataset_ids"][0]),
@@ -322,7 +350,13 @@ def evaluate(root: Path, experiment_id: str) -> dict:
         raise ValueError("Strategy code changed after preregistration.")
 
     dates, bars_by_date = load_bars(data_path)
-    strategy = load_strategy(strategy_path)
+    if warmup_sessions >= len(dates):
+        raise ValueError("warmup_sessions must leave at least one execution session.")
+    strategy, strategy_warmup_sessions = load_strategy(strategy_path)
+    if strategy_warmup_sessions != warmup_sessions:
+        raise ValueError(
+            "Preregistered warmup_sessions does not match the strategy contract."
+        )
     benchmark_symbol = design["benchmarks"][0].upper()
     if benchmark_symbol not in bars_by_date[dates[0]]:
         raise ValueError("Benchmark symbol is absent from the dataset.")
@@ -348,7 +382,7 @@ def evaluate(root: Path, experiment_id: str) -> dict:
     trades = []
     turnover_notional = 0.0
 
-    for date in dates:
+    for index, date in enumerate(dates):
         if time.monotonic() - start > timeout_seconds:
             raise TimeoutError("Evaluator exceeded preregistered time budget.")
         day = bars_by_date[date]
@@ -379,13 +413,17 @@ def evaluate(root: Path, experiment_id: str) -> dict:
         )
         for symbol, row in day.items():
             history[symbol].append(dict(row))
-        pending_weights = validate_weights(strategy(dict(history), date), policy)
+        if index + 1 >= warmup_sessions:
+            pending_weights = validate_weights(strategy(dict(history), date), policy)
+        else:
+            pending_weights = None
 
-    first_open = bars_by_date[dates[0]][benchmark_symbol]["open"]
-    last_close = bars_by_date[dates[-1]][benchmark_symbol]["close"]
-    benchmark_return = last_close / first_open - 1
+    evaluation_start, evaluation_end, benchmark_return = benchmark_interval(
+        dates, bars_by_date, benchmark_symbol, warmup_sessions
+    )
+    evaluation_rows = equity_rows[warmup_sessions:]
     metrics = calculate_metrics(
-        equity_rows, trades, design["initial_capital"], benchmark_return
+        evaluation_rows, trades, design["initial_capital"], benchmark_return
     )
     metrics["turnover_notional"] = turnover_notional
     validity = {
@@ -425,8 +463,12 @@ def evaluate(root: Path, experiment_id: str) -> dict:
     with (result_dir / "run.log").open("x", encoding="utf-8") as handle:
         handle.write(
             f"experiment_id={experiment_id}\n"
-            f"evaluator_id=EV-0001\n"
+            f"evaluator_id={EVALUATOR_ID}\n"
             f"system_generation={design['system_generation']}\n"
+            f"evaluation_start={evaluation_start}\n"
+            f"evaluation_end={evaluation_end}\n"
+            f"warmup_sessions={warmup_sessions}\n"
+            f"benchmark_symbol={benchmark_symbol}\n"
             f"finished_at={ended}\n"
             f"status=completed\n"
         )
@@ -449,7 +491,7 @@ def evaluate(root: Path, experiment_id: str) -> dict:
         result_dir / "artifact-manifest.json",
         {
             "experiment_id": experiment_id,
-            "evaluator_id": "EV-0001",
+            "evaluator_id": EVALUATOR_ID,
             "system_generation": design["system_generation"],
             "artifacts": artifacts,
         },

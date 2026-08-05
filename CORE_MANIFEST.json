@@ -1,7 +1,7 @@
 {
   "schema_version": "1.0.0",
-  "system_generation": "G-0001",
-  "created_at": "2026-08-05T05:16:00Z",
+  "system_generation": "G-0002",
+  "created_at": "2026-08-05T15:40:00Z",
   "protected_files": [
     "MISSION.md",
     "CORE_MANIFEST.json",
@@ -11,7 +11,7 @@
   ],
   "sealed_components": [
     {
-      "component_id": "EV-0001",
+      "component_id": "EV-0002",
       "name": "experiment-contract",
       "paths": [
         {
@@ -20,11 +20,11 @@
         },
         {
           "path": "scripts/validate_repository.py",
-          "sha256": "65622e6c27b62ba3772d1afdfb73aa96d1b09e520cf56e0af2766a3ed9610d45"
+          "sha256": "43f5ecfcf01806c9721772cea45dc5d9e9ee9b654cddfab163380e2b6cdc3226"
         },
         {
           "path": "evaluator/daily_bar.py",
-          "sha256": "56f7a983df1e497dbbace91a2dd684575989dfeb020609178b58be8fbd30251d"
+          "sha256": "bf98c3a7d730858ebbbbdddb78e4ae429096c96697f4aaebff046739300a7d48"
         },
         {
           "path": "scripts/record_evidence_review.py",
@@ -36,7 +36,7 @@
         },
         {
           "path": "scripts/preregister_experiment.py",
-          "sha256": "8f1a8a56d3b0e2f577ac16ddcd861abb384f89be2122226d1b2c54c2d261bad1"
+          "sha256": "1f384bc4c40e8f49dfdf2301329eb3b63cfc7258b89e25670473b8b28bb2f1b6"
         }
       ],
       "status": "sealed"

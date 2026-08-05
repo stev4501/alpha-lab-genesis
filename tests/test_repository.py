@@ -223,7 +223,7 @@ class RepositoryContractTests(unittest.TestCase):
             args = SimpleNamespace(
                 hypothesis="H-0001",
                 parent=None,
-                strategy="S-0001",
+                strategy="S-0002",
                 title="Passive SPY evaluator baseline",
                 rationale="Validate timing, costs, accounting, and finalization.",
                 prediction="The first trade occurs on the second session open.",
@@ -243,14 +243,20 @@ class RepositoryContractTests(unittest.TestCase):
                 holdout=False,
                 purge_periods=None,
                 embargo_periods=None,
-                strategy_entrypoint="strategies/S-0001/strategy.py",
+                strategy_entrypoint="strategies/S-0002/strategy.py",
                 initial_capital=100000.0,
                 strategy_sha256=hashlib.sha256(
-                    (temp_root / "strategies/S-0001/strategy.py").read_bytes()
+                    (temp_root / "strategies/S-0002/strategy.py").read_bytes()
                 ).hexdigest(),
                 data_manifest_sha256=hashlib.sha256(
                     (temp_root / "DATA_MANIFEST.json").read_bytes()
                 ).hexdigest(),
+                evaluator_id="EV-0002",
+                signal_timestamp_rule="After session close",
+                execution_timestamp_rule="Next session open",
+                rebalance_rule="Daily",
+                holding_period="Until next rebalance",
+                warmup_sessions=1,
             )
             prereg = preregister.build_record(args, "E-0001", state, manifest)
             state["budget"]["trials_consumed"] = 1
@@ -274,6 +280,10 @@ class RepositoryContractTests(unittest.TestCase):
 
             metrics = daily_bar.evaluate(temp_root, "E-0001")
             self.assertGreater(metrics["trade_count"], 0)
+            expected_benchmark = rows[-1][5] / rows[1][2] - 1
+            self.assertAlmostEqual(
+                expected_benchmark, metrics["benchmark_metric_value"]
+            )
             with (result_dir / "trades.csv").open(encoding="utf-8") as handle:
                 trades = list(csv.DictReader(handle))
             self.assertEqual("2026-01-05", trades[0]["date"])
@@ -318,6 +328,106 @@ class RepositoryContractTests(unittest.TestCase):
                 (temp_root / "STATE.json").read_text(encoding="utf-8")
             )
             self.assertEqual(completed, state_replayed["budget"]["experiments_completed"])
+
+    def test_historical_generation_remains_valid_after_generation_bump(self):
+        records = validator.load_ledger(ROOT / "EXPERIMENTS.jsonl", [])
+        self.assertTrue(
+            any(
+                record["design"]["system_generation"] == "G-0001"
+                for record in records
+            )
+        )
+        self.assertEqual("G-0002", json.loads(
+            (ROOT / "CORE_MANIFEST.json").read_text(encoding="utf-8")
+        )["system_generation"])
+        self.assertEqual([], validator.validate(ROOT))
+
+    def test_evaluation_start_is_first_executable_session(self):
+        dates = ["2026-01-02", "2026-01-05", "2026-01-06"]
+        bars = {
+            "2026-01-02": {"SPY": {"open": 100.0, "close": 101.0}},
+            "2026-01-05": {"SPY": {"open": 102.0, "close": 103.0}},
+            "2026-01-06": {"SPY": {"open": 104.0, "close": 105.0}},
+        }
+        start, end, result = daily_bar.benchmark_interval(dates, bars, "SPY", 1)
+        self.assertEqual("2026-01-05", start)
+        self.assertEqual("2026-01-06", end)
+        self.assertAlmostEqual(105.0 / 102.0 - 1, result)
+
+    def test_preregistered_warmup_moves_common_evaluation_start(self):
+        dates = [
+            "2026-01-02",
+            "2026-01-05",
+            "2026-01-06",
+            "2026-01-07",
+            "2026-01-08",
+        ]
+        bars = {
+            date: {"SPY": {"open": 100.0 + index, "close": 100.5 + index}}
+            for index, date in enumerate(dates)
+        }
+        start, end, result = daily_bar.benchmark_interval(dates, bars, "SPY", 3)
+        self.assertEqual("2026-01-07", start)
+        self.assertEqual("2026-01-08", end)
+        self.assertAlmostEqual(104.5 / 103.0 - 1, result)
+
+    def test_pending_experiment_must_use_current_sealed_evaluator(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            temp_root = Path(temporary) / "lab"
+            shutil.copytree(ROOT, temp_root)
+            pending = json.loads(
+                (
+                    temp_root / "results" / "E-0001" / "preregistration.json"
+                ).read_text(encoding="utf-8")
+            )
+            pending["experiment_id"] = "E-9999"
+            pending["design"]["system_generation"] = "G-0002"
+            pending["design"]["evaluator_id"] = "EV-0001"
+            pending_dir = temp_root / "results" / "E-9999"
+            pending_dir.mkdir()
+            (pending_dir / "preregistration.json").write_text(
+                json.dumps(pending, indent=2) + "\n", encoding="utf-8"
+            )
+            errors = validator.validate(temp_root)
+            self.assertTrue(
+                any(
+                    "does not use the current sealed evaluator" in error
+                    for error in errors
+                )
+            )
+
+    def test_strategy_warmup_is_pinned_and_runtime_mismatch_is_rejected(self):
+        strategy_path = ROOT / "strategies" / "S-0002" / "strategy.py"
+        self.assertEqual(1, preregister.strategy_warmup_sessions(strategy_path))
+        with tempfile.TemporaryDirectory() as temporary:
+            temp_root = Path(temporary) / "lab"
+            shutil.copytree(ROOT, temp_root)
+            pending = json.loads(
+                (
+                    temp_root / "results" / "E-0001" / "preregistration.json"
+                ).read_text(encoding="utf-8")
+            )
+            pending["experiment_id"] = "E-9998"
+            pending["design"]["system_generation"] = "G-0002"
+            pending["design"]["evaluator_id"] = "EV-0002"
+            pending["design"]["strategy_id"] = "S-0002"
+            pending["design"]["strategy_entrypoint"] = (
+                "strategies/S-0002/strategy.py"
+            )
+            pending["design"]["parameter_coordinates"] = {"warmup_sessions": 2}
+            copied_strategy = (
+                temp_root / "strategies" / "S-0002" / "strategy.py"
+            )
+            pending["design"]["strategy_sha256"] = hashlib.sha256(
+                copied_strategy.read_bytes()
+            ).hexdigest()
+            pending_dir = temp_root / "results" / "E-9998"
+            pending_dir.mkdir()
+            (pending_dir / "preregistration.json").write_text(
+                json.dumps(pending, indent=2) + "\n", encoding="utf-8"
+            )
+            with self.assertRaisesRegex(ValueError, "does not match"):
+                daily_bar.evaluate(temp_root, "E-9998")
 
 
 if __name__ == "__main__":

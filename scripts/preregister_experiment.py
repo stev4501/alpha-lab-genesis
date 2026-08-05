@@ -2,6 +2,7 @@
 """Create an immutable experiment preregistration draft."""
 
 import argparse
+import ast
 import hashlib
 import json
 import os
@@ -44,6 +45,44 @@ def atomic_write(path: Path, payload: dict) -> None:
     os.replace(temporary, path)
 
 
+def active_evaluator_id(core_manifest: dict) -> str:
+    identifiers = [
+        component["component_id"]
+        for component in core_manifest.get("sealed_components", [])
+        if component.get("status") == "sealed"
+        and str(component.get("component_id", "")).startswith("EV-")
+    ]
+    if len(identifiers) != 1:
+        raise ValueError("Exactly one sealed evaluator must be active.")
+    return identifiers[0]
+
+
+def strategy_warmup_sessions(strategy_path: Path) -> int:
+    tree = ast.parse(
+        strategy_path.read_text(encoding="utf-8"), filename=str(strategy_path)
+    )
+    values = []
+    for node in tree.body:
+        if not isinstance(node, (ast.Assign, ast.AnnAssign)):
+            continue
+        targets = node.targets if isinstance(node, ast.Assign) else [node.target]
+        if not any(
+            isinstance(target, ast.Name) and target.id == "WARMUP_SESSIONS"
+            for target in targets
+        ):
+            continue
+        try:
+            values.append(ast.literal_eval(node.value))
+        except (ValueError, TypeError):
+            raise ValueError("WARMUP_SESSIONS must be an integer literal.") from None
+    if len(values) != 1:
+        raise ValueError("Strategy must define WARMUP_SESSIONS exactly once.")
+    value = values[0]
+    if not isinstance(value, int) or isinstance(value, bool) or value < 1:
+        raise ValueError("WARMUP_SESSIONS must be a positive integer.")
+    return value
+
+
 def build_record(args, experiment_id: str, state: dict, manifest: dict) -> dict:
     now = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
     return {
@@ -65,10 +104,10 @@ def build_record(args, experiment_id: str, state: dict, manifest: dict) -> dict:
         },
         "design": {
             "system_generation": state["objective"]["system_generation"],
-            "evaluator_id": "EV-0001",
+            "evaluator_id": args.evaluator_id,
             "trial_family_id": args.trial_family,
             "trial_number": state["budget"]["trials_consumed"] + 1,
-            "parameter_coordinates": {},
+            "parameter_coordinates": {"warmup_sessions": args.warmup_sessions},
             "holdout_access": args.holdout,
             "strategy_entrypoint": args.strategy_entrypoint,
             "strategy_sha256": args.strategy_sha256,
@@ -83,10 +122,10 @@ def build_record(args, experiment_id: str, state: dict, manifest: dict) -> dict:
             "universe_id": args.universe,
             "discovery_window": None,
             "confirmation_window": None,
-            "signal_timestamp_rule": None,
-            "execution_timestamp_rule": None,
-            "rebalance_rule": None,
-            "holding_period": None,
+            "signal_timestamp_rule": args.signal_timestamp_rule,
+            "execution_timestamp_rule": args.execution_timestamp_rule,
+            "rebalance_rule": args.rebalance_rule,
+            "holding_period": args.holding_period,
             "benchmarks": args.benchmark,
             "cost_model_id": args.cost_model,
             "risk_policy_id": args.risk_policy,
@@ -157,6 +196,10 @@ def main() -> int:
     parser.add_argument("--minutes", type=int, default=30)
     parser.add_argument("--primary-metric", default="net_excess_return")
     parser.add_argument("--agent", default="autonomous-agent")
+    parser.add_argument("--signal-timestamp-rule", default="After session close")
+    parser.add_argument("--execution-timestamp-rule", default="Next session open")
+    parser.add_argument("--rebalance-rule", default="Daily")
+    parser.add_argument("--holding-period", default="Until next rebalance")
     args = parser.parse_args()
 
     root = args.root.resolve()
@@ -167,8 +210,11 @@ def main() -> int:
         raise ValueError("strategy_entrypoint must be an existing repository file.")
     args.strategy_sha256 = hashlib.sha256(strategy_path.read_bytes()).hexdigest()
     args.data_manifest_sha256 = hashlib.sha256(manifest_path.read_bytes()).hexdigest()
+    args.warmup_sessions = strategy_warmup_sessions(strategy_path)
     state = json.loads(state_path.read_text(encoding="utf-8"))
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    core_manifest = json.loads((root / "CORE_MANIFEST.json").read_text(encoding="utf-8"))
+    args.evaluator_id = active_evaluator_id(core_manifest)
     budget = state["budget"]
     if budget["trials_consumed"] >= budget["trial_budget"]:
         raise ValueError("Trial budget exhausted.")

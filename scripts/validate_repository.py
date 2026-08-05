@@ -157,6 +157,12 @@ def sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
+def generation_number(value: object) -> int | None:
+    if not isinstance(value, str) or not re.fullmatch(r"G-[0-9]{4,}", value):
+        return None
+    return int(value.split("-", 1)[1])
+
+
 def parse_skill_frontmatter(path: Path, errors: list[str]) -> dict:
     text = path.read_text(encoding="utf-8")
     if not text.startswith("---\n"):
@@ -189,6 +195,18 @@ def validate(root: Path) -> list[str]:
     state = load_json(root / "STATE.json", errors)
     manifest = load_json(root / "DATA_MANIFEST.json", errors)
     core_manifest = load_json(root / "CORE_MANIFEST.json", errors)
+    sealed_evaluator_ids = {
+        component.get("component_id")
+        for component in core_manifest.get("sealed_components", [])
+        if component.get("status") == "sealed"
+        and isinstance(component.get("component_id"), str)
+        and component["component_id"].startswith("EV-")
+    }
+    if len(sealed_evaluator_ids) != 1:
+        errors.append("Exactly one sealed evaluator must be active.")
+        active_evaluator_id = None
+    else:
+        active_evaluator_id = next(iter(sealed_evaluator_ids))
     schemas = [
         load_json(root / "schemas" / name, errors)
         for name in [
@@ -231,6 +249,10 @@ def validate(root: Path) -> list[str]:
     if state.get("objective", {}).get("system_generation") != core_manifest.get("system_generation"):
         errors.append("STATE.json and CORE_MANIFEST.json system generation disagree.")
 
+    current_generation_number = generation_number(core_manifest.get("system_generation"))
+    if current_generation_number is None:
+        errors.append("CORE_MANIFEST.json contains an invalid system generation.")
+
     experiment_ids = []
     for index, record in enumerate(records, start=1):
         missing = EXPERIMENT_FIELDS - set(record)
@@ -252,8 +274,15 @@ def validate(root: Path) -> list[str]:
         missing_validity = VALIDITY_FIELDS - set(record.get("validity", {}))
         if missing_validity:
             errors.append(f"Experiment {experiment_id} validity missing: {sorted(missing_validity)}")
-        if record.get("design", {}).get("system_generation") != core_manifest.get("system_generation"):
-            errors.append(f"Experiment {experiment_id} has an unrecognized system generation.")
+        record_generation = record.get("design", {}).get("system_generation")
+        record_generation_number = generation_number(record_generation)
+        if record_generation_number is None:
+            errors.append(f"Experiment {experiment_id} has an invalid system generation.")
+        elif (
+            current_generation_number is not None
+            and record_generation_number > current_generation_number
+        ):
+            errors.append(f"Experiment {experiment_id} belongs to a future system generation.")
         if not record.get("design", {}).get("promotion_rule", {}).get("criteria"):
             errors.append(f"Experiment {experiment_id} lacks promotion criteria.")
         if record.get("status") == "completed":
@@ -284,6 +313,24 @@ def validate(root: Path) -> list[str]:
     active = state.get("objective", {}).get("active_experiment_id")
     if active is not None and active not in known_ids | preregistration_ids:
         errors.append("objective.active_experiment_id does not reference the ledger or a preregistration.")
+    for preregistration in preregistrations:
+        if preregistration.get("experiment_id") in known_ids:
+            continue
+        if (
+            preregistration.get("design", {}).get("system_generation")
+            != core_manifest.get("system_generation")
+        ):
+            errors.append(
+                f"Pending experiment {preregistration.get('experiment_id')} does not use the current system generation."
+            )
+        if (
+            active_evaluator_id is not None
+            and preregistration.get("design", {}).get("evaluator_id")
+            != active_evaluator_id
+        ):
+            errors.append(
+                f"Pending experiment {preregistration.get('experiment_id')} does not use the current sealed evaluator."
+            )
     baseline = state.get("objective", {}).get("baseline_experiment_id")
     if baseline is not None and baseline not in known_ids:
         errors.append("objective.baseline_experiment_id does not reference the ledger.")
