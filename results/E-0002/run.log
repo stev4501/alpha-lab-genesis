@@ -1,0 +1,9 @@
+experiment_id=E-0002
+evaluator_id=EV-0002
+system_generation=G-0002
+evaluation_start=2024-01-03
+evaluation_end=2025-12-31
+warmup_sessions=1
+benchmark_symbol=SPY
+finished_at=2026-08-05T17:55:12.731127Z
+status=completed

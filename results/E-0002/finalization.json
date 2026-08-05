@@ -1,0 +1,145 @@
+{
+  "schema_version": "1.0.0",
+  "experiment_id": "E-0002",
+  "run_id": "R-20260805T175503Z-fa81cf",
+  "hypothesis_id": "H-0001",
+  "parent_experiment_id": null,
+  "strategy_id": "S-0002",
+  "status": "completed",
+  "evidence_stage": "baseline",
+  "created_at": "2026-08-05T17:55:09.773266Z",
+  "started_at": "2026-08-05T17:55:09.773266Z",
+  "finished_at": "2026-08-05T17:58:57.029557Z",
+  "intent": {
+    "title": "Passive SPY aligned-clock baseline",
+    "rationale": "Verify EV-0002 aligns strategy and benchmark evaluation clocks while preserving next-open execution and realistic costs.",
+    "predicted_outcome": "The first eligible fill and benchmark begin at the second session open, and the passive implementation trails the frictionless benchmark only by implementation effects."
+  },
+  "design": {
+    "system_generation": "G-0002",
+    "evaluator_id": "EV-0002",
+    "trial_family_id": "TF-0001",
+    "trial_number": 2,
+    "parameter_coordinates": {
+      "warmup_sessions": 1
+    },
+    "holdout_access": false,
+    "strategy_entrypoint": "strategies/S-0002/strategy.py",
+    "strategy_sha256": "e28f6de15b2345d4311a17ea20671c77233b94b5538e50b8825f51a6860c3b5c",
+    "initial_capital": 100000.0,
+    "code_commit": "5ff8f61673843a736b28d44aa04ccea790b9df1f",
+    "environment_id": "python-stdlib-mvp",
+    "random_seed": null,
+    "time_budget_minutes": 10,
+    "data_manifest_version": "1.0.0",
+    "data_manifest_sha256": "74f2d455abde729d127af73a36f307f3352e0859371117520697b60b68c1b39e",
+    "dataset_ids": [
+      "D-0001"
+    ],
+    "universe_id": "U-0001",
+    "discovery_window": null,
+    "confirmation_window": null,
+    "signal_timestamp_rule": "After session close",
+    "execution_timestamp_rule": "Next session open",
+    "rebalance_rule": "Daily",
+    "holding_period": "Through final session close",
+    "benchmarks": [
+      "SPY"
+    ],
+    "cost_model_id": "C-0001",
+    "risk_policy_id": "R-0001",
+    "primary_metric": "net_excess_return",
+    "secondary_metrics": [
+      "sharpe_ratio",
+      "max_drawdown",
+      "turnover"
+    ],
+    "promotion_rule": {
+      "operator": "all",
+      "criteria": [
+        "The first simulated fill and benchmark both begin at the evaluation start.",
+        "All artifacts reconcile and repository validation passes.",
+        "The passive implementation does not outperform the frictionless SPY benchmark after costs."
+      ]
+    }
+  },
+  "results": {
+    "primary_metric_value": -0.0014186793639809903,
+    "benchmark_metric_value": 0.44956741704398095,
+    "net_excess_return": -0.0014186793639809903,
+    "total_return": 0.44814873767999996,
+    "annualized_return": 0.20472538509427585,
+    "annualized_volatility": 0.16337329392295216,
+    "sharpe_ratio": 1.221394548831694,
+    "max_drawdown": 0.18962739695180023,
+    "turnover": 0.8085773955620554,
+    "trade_count": 1,
+    "estimated_cost": 21.006232000000917,
+    "confidence_interval": null,
+    "observations": 501,
+    "turnover_notional": 99751.106232
+  },
+  "validity": {
+    "preregistered": true,
+    "trial_budget_debited": true,
+    "purge_periods": null,
+    "embargo_periods": null,
+    "lookahead_check": "passed",
+    "survivorship_check": "passed",
+    "leakage_check": "passed",
+    "corporate_action_check": "passed",
+    "missing_data_check": "passed",
+    "multiple_testing_adjustment": "not_run",
+    "independent_review": "passed"
+  },
+  "decision": {
+    "outcome": "keep",
+    "reason": "EV-0002 passed independent evidence review: aligned clocks, next-open execution, artifact integrity, and portfolio reconciliation are decision-valid.",
+    "next_action": "Add an immutable point-in-time data refresh adapter before forward paper scheduling.",
+    "next_evidence_stage": "baseline"
+  },
+  "artifacts": [
+    {
+      "path": "results/E-0002/metrics.json",
+      "sha256": "17ba4a0d72b1022e402adc51d35f53222e90473921cac2f3c27fcf2d9450b88e",
+      "media_type": "application/json"
+    },
+    {
+      "path": "results/E-0002/validity.json",
+      "sha256": "bcfa941c66af69c70bedcce6795520b49877f35daca50136f24546f6aef51c71",
+      "media_type": "application/json"
+    },
+    {
+      "path": "results/E-0002/equity.csv",
+      "sha256": "7e67e287634ac6773aaa27b69f0a075986481a5b81c231f3c6621f375e061805",
+      "media_type": "text/csv"
+    },
+    {
+      "path": "results/E-0002/trades.csv",
+      "sha256": "2463340f37941f82f4e52081eeca0369ec18d7fdad848c0bfe6a6a54a0e0272a",
+      "media_type": "text/csv"
+    },
+    {
+      "path": "results/E-0002/run.log",
+      "sha256": "7424db143bc2edb5a718385f3af78ae3ba2f4584b7f88b1063cd87223175dda6",
+      "media_type": "text/plain"
+    },
+    {
+      "path": "results/E-0002/artifact-manifest.json",
+      "sha256": "baba1a508e0c5a604b79450f371185ec34f41bd9919e7c454db5482a20a59ca2",
+      "media_type": "application/json"
+    },
+    {
+      "path": "results/E-0002/review.json",
+      "sha256": "2760ec5589ac5ea0ea8c7bfd26656f52cb1934f7453199c1ce2d4031525156b5",
+      "media_type": "application/json"
+    }
+  ],
+  "lineage": {
+    "agent_id": "perplexity-computer",
+    "skill_versions": {
+      "experiment-loop": "0.1.0"
+    },
+    "tool_versions": {}
+  }
+}

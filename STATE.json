@@ -1,31 +1,31 @@
 {
   "schema_version": "1.0.0",
-  "revision": 6,
-  "updated_at": "2026-08-05T15:40:00Z",
+  "revision": 11,
+  "updated_at": "2026-08-05T18:04:00Z",
   "run": {
-    "run_id": "R-20260805T152457Z-001279",
-    "previous_run_id": null,
+    "run_id": "R-20260805T175503Z-fa81cf",
+    "previous_run_id": "R-20260805T152457Z-001279",
     "status": "completed",
-    "started_at": "2026-08-05T15:24:57.404420Z",
-    "deadline_at": "2026-08-05T17:24:57.404420Z",
+    "started_at": "2026-08-05T17:55:03.591773Z",
+    "deadline_at": "2026-08-05T19:25:03.591773Z",
     "reserve_minutes": 10,
     "dirty_shutdown": false
   },
   "objective": {
-    "system_generation": "G-0002",
+    "system_generation": "G-0003",
     "evidence_stage": "baseline",
     "active_hypothesis_id": "H-0001",
     "active_experiment_id": null,
     "champion_strategy_id": null,
-    "baseline_experiment_id": null
+    "baseline_experiment_id": "E-0002"
   },
   "budget": {
-    "session_minutes": 120,
-    "used_minutes": 2,
+    "session_minutes": 90,
+    "used_minutes": 0,
     "max_experiments": 1,
     "experiments_completed": 1,
     "trial_budget": 20,
-    "trials_consumed": 1,
+    "trials_consumed": 2,
     "holdout_touch_budget": 1,
     "holdout_touches": 0
   },
@@ -65,37 +65,36 @@
   ],
   "next_actions": [
     {
-      "action_id": "A-0004",
+      "action_id": "A-0005",
       "priority": 1,
-      "expected_information_gain": 1.0,
-      "estimated_minutes": 20,
-      "skill": "experiment-loop",
-      "description": "Preregister and execute E-0002 using EV-0002 against D-0001.",
-      "success_criterion": "Independent review confirms strategy and benchmark begin at the same evaluation start and all artifacts reconcile.",
-      "prerequisites": ["E-0001"]
+      "expected_information_gain": 0.9,
+      "estimated_minutes": 90,
+      "skill": "pit-data-contract",
+      "description": "Add an immutable point-in-time data refresh adapter before forward paper scheduling.",
+      "success_criterion": "A validated immutable snapshot can be resolved by as-of time without changing prior dataset versions.",
+      "prerequisites": []
     }
   ],
   "handoff": {
-    "summary": "G-0002 and EV-0002 were authorized and staged; E-0002 is the next executable action.",
+    "summary": "E-0002 finalized as keep: EV-0002 passed independent evidence review: aligned clocks, next-open execution, artifact integrity, and portfolio reconciliation are decision-valid.",
     "last_verified_artifacts": [
-      "results/E-0001/metrics.json",
-      "results/E-0001/validity.json",
-      "results/E-0001/equity.csv",
-      "results/E-0001/trades.csv",
-      "results/E-0001/run.log",
-      "results/E-0001/artifact-manifest.json",
-      "results/E-0001/review.json"
+      "results/E-0002/metrics.json",
+      "results/E-0002/validity.json",
+      "results/E-0002/equity.csv",
+      "results/E-0002/trades.csv",
+      "results/E-0002/run.log",
+      "results/E-0002/artifact-manifest.json",
+      "results/E-0002/review.json"
     ],
-    "next_action_id": "A-0004",
+    "next_action_id": "A-0005",
     "unresolved_risks": [
-      "No baseline strategy",
       "No paper account",
       "Distributions are excluded from D-0001"
     ]
   },
   "integrity": {
-    "last_validation_at": "2026-08-05T15:27:20.789805Z",
-    "last_experiment_id": "E-0001",
+    "last_validation_at": "2026-08-05T18:04:00Z",
+    "last_experiment_id": "E-0002",
     "validation_status": "valid"
   }
 }

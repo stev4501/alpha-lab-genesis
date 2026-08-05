@@ -1,0 +1,13 @@
+{
+  "preregistered": true,
+  "trial_budget_debited": true,
+  "purge_periods": null,
+  "embargo_periods": null,
+  "lookahead_check": "passed",
+  "survivorship_check": "passed",
+  "leakage_check": "passed",
+  "corporate_action_check": "passed",
+  "missing_data_check": "passed",
+  "multiple_testing_adjustment": "not_run",
+  "independent_review": "not_run"
+}

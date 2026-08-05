@@ -166,28 +166,60 @@ def update_state(root: Path, final_record: dict) -> None:
     state_path = root / "STATE.json"
     state = read_json(state_path)
     experiment_id = final_record["experiment_id"]
-    if state["integrity"]["last_experiment_id"] == experiment_id:
-        return
+    before = json.dumps(state, sort_keys=True)
+    already_applied = state["integrity"]["last_experiment_id"] == experiment_id
     decision = final_record["decision"]
     outcome = decision["outcome"]
     next_stage = decision["next_evidence_stage"]
-    state["revision"] += 1
-    state["updated_at"] = final_record["finished_at"]
     state["objective"]["active_experiment_id"] = None
     if outcome in {"promote", "demote"}:
         state["objective"]["evidence_stage"] = next_stage
     if outcome == "promote":
         state["objective"]["champion_strategy_id"] = final_record["strategy_id"]
-    state["budget"]["experiments_completed"] += 1
+    if next_stage == "baseline" and outcome in {"keep", "promote"}:
+        state["objective"]["baseline_experiment_id"] = experiment_id
+    if not already_applied:
+        state["budget"]["experiments_completed"] += 1
+    state["run"]["status"] = "completed"
+    state["run"]["dirty_shutdown"] = False
     state["handoff"]["summary"] = (
         f"{experiment_id} finalized as {outcome}: {decision['reason']}"
     )
     state["handoff"]["last_verified_artifacts"] = [
         item["path"] for item in final_record["artifacts"]
     ]
+    if (
+        not state["next_actions"]
+        or state["next_actions"][0]["description"] != decision["next_action"]
+    ):
+        action_numbers = [
+            int(item["action_id"].split("-", 1)[1])
+            for item in state["next_actions"]
+            if item.get("action_id", "").startswith("A-")
+        ]
+        action_id = f"A-{max(action_numbers, default=0) + 1:04d}"
+        state["next_actions"] = [
+            {
+                "action_id": action_id,
+                "priority": 1,
+                "expected_information_gain": 0.9,
+                "estimated_minutes": 90,
+                "skill": "pit-data-contract",
+                "description": decision["next_action"],
+                "success_criterion": (
+                    "A validated immutable snapshot can be resolved by as-of time "
+                    "without changing prior dataset versions."
+                ),
+                "prerequisites": [],
+            }
+        ]
+        state["handoff"]["next_action_id"] = action_id
     state["integrity"]["last_experiment_id"] = experiment_id
     state["integrity"]["validation_status"] = "pending"
-    atomic_write_json(state_path, state)
+    if json.dumps(state, sort_keys=True) != before:
+        state["revision"] += 1
+        state["updated_at"] = final_record["finished_at"]
+        atomic_write_json(state_path, state)
 
 
 def main() -> int:

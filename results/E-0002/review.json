@@ -1,0 +1,19 @@
+{
+  "schema_version": "1.0.0",
+  "experiment_id": "E-0002",
+  "reviewer_id": "evidence-review-agent",
+  "reviewed_at": "2026-08-05T17:58:53.453365Z",
+  "decision": "keep",
+  "findings": [
+    "Dataset, strategy, manifest, and all result artifact checksums match.",
+    "First eligible fill and benchmark both begin at the 2024-01-03 open after one pinned warm-up session.",
+    "Next-open timing, final-close alignment, portfolio reconciliation, costs, integer sizing, and cash drag independently reproduce.",
+    "E-0001 remains byte-for-byte unchanged and repository validation passes."
+  ],
+  "next_action": "Add an immutable point-in-time data refresh adapter before forward paper scheduling.",
+  "independent_review": "passed",
+  "promotion_criteria_passed": true,
+  "reviewed_primary_metric": "net_excess_return",
+  "reviewed_primary_metric_value": -0.0014186793639809903,
+  "validity_failures": []
+}

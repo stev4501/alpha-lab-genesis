@@ -1,0 +1,16 @@
+{
+  "primary_metric_value": -0.0014186793639809903,
+  "benchmark_metric_value": 0.44956741704398095,
+  "net_excess_return": -0.0014186793639809903,
+  "total_return": 0.44814873767999996,
+  "annualized_return": 0.20472538509427585,
+  "annualized_volatility": 0.16337329392295216,
+  "sharpe_ratio": 1.221394548831694,
+  "max_drawdown": 0.18962739695180023,
+  "turnover": 0.8085773955620554,
+  "trade_count": 1,
+  "estimated_cost": 21.006232000000917,
+  "confidence_interval": null,
+  "observations": 501,
+  "turnover_notional": 99751.106232
+}

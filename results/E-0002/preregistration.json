@@ -1,0 +1,94 @@
+{
+  "schema_version": "1.0.0",
+  "experiment_id": "E-0002",
+  "run_id": "R-20260805T175503Z-fa81cf",
+  "hypothesis_id": "H-0001",
+  "parent_experiment_id": null,
+  "strategy_id": "S-0002",
+  "status": "preregistered",
+  "evidence_stage": "baseline",
+  "created_at": "2026-08-05T17:55:09.773266Z",
+  "started_at": null,
+  "finished_at": null,
+  "intent": {
+    "title": "Passive SPY aligned-clock baseline",
+    "rationale": "Verify EV-0002 aligns strategy and benchmark evaluation clocks while preserving next-open execution and realistic costs.",
+    "predicted_outcome": "The first eligible fill and benchmark begin at the second session open, and the passive implementation trails the frictionless benchmark only by implementation effects."
+  },
+  "design": {
+    "system_generation": "G-0002",
+    "evaluator_id": "EV-0002",
+    "trial_family_id": "TF-0001",
+    "trial_number": 2,
+    "parameter_coordinates": {
+      "warmup_sessions": 1
+    },
+    "holdout_access": false,
+    "strategy_entrypoint": "strategies/S-0002/strategy.py",
+    "strategy_sha256": "e28f6de15b2345d4311a17ea20671c77233b94b5538e50b8825f51a6860c3b5c",
+    "initial_capital": 100000.0,
+    "code_commit": "5ff8f61673843a736b28d44aa04ccea790b9df1f",
+    "environment_id": "python-stdlib-mvp",
+    "random_seed": null,
+    "time_budget_minutes": 10,
+    "data_manifest_version": "1.0.0",
+    "data_manifest_sha256": "74f2d455abde729d127af73a36f307f3352e0859371117520697b60b68c1b39e",
+    "dataset_ids": [
+      "D-0001"
+    ],
+    "universe_id": "U-0001",
+    "discovery_window": null,
+    "confirmation_window": null,
+    "signal_timestamp_rule": "After session close",
+    "execution_timestamp_rule": "Next session open",
+    "rebalance_rule": "Daily",
+    "holding_period": "Through final session close",
+    "benchmarks": [
+      "SPY"
+    ],
+    "cost_model_id": "C-0001",
+    "risk_policy_id": "R-0001",
+    "primary_metric": "net_excess_return",
+    "secondary_metrics": [
+      "sharpe_ratio",
+      "max_drawdown",
+      "turnover"
+    ],
+    "promotion_rule": {
+      "operator": "all",
+      "criteria": [
+        "The first simulated fill and benchmark both begin at the evaluation start.",
+        "All artifacts reconcile and repository validation passes.",
+        "The passive implementation does not outperform the frictionless SPY benchmark after costs."
+      ]
+    }
+  },
+  "results": null,
+  "validity": {
+    "preregistered": true,
+    "trial_budget_debited": true,
+    "purge_periods": null,
+    "embargo_periods": null,
+    "lookahead_check": "not_run",
+    "survivorship_check": "not_run",
+    "leakage_check": "not_run",
+    "corporate_action_check": "not_run",
+    "missing_data_check": "not_run",
+    "multiple_testing_adjustment": "not_run",
+    "independent_review": "not_run"
+  },
+  "decision": {
+    "outcome": "block",
+    "reason": "Pending execution and evidence review.",
+    "next_action": "Complete design fields, execute, and finalize the experiment.",
+    "next_evidence_stage": "baseline"
+  },
+  "artifacts": [],
+  "lineage": {
+    "agent_id": "perplexity-computer",
+    "skill_versions": {
+      "experiment-loop": "0.1.0"
+    },
+    "tool_versions": {}
+  }
+}

@@ -68,7 +68,14 @@ class RepositoryContractTests(unittest.TestCase):
             identifier = preregister.next_experiment_id(
                 temp_root / "EXPERIMENTS.jsonl", temp_root / "results"
             )
-            self.assertEqual("E-0002", identifier)
+            used = {
+                int(record["experiment_id"].split("-", 1)[1])
+                for record in validator.load_ledger(
+                    temp_root / "EXPERIMENTS.jsonl", []
+                )
+            }
+            used.add(1)
+            self.assertEqual(f"E-{max(used) + 1:04d}", identifier)
 
     def test_no_proven_key_in_canonical_state(self):
         state = json.loads((ROOT / "STATE.json").read_text(encoding="utf-8"))
@@ -80,6 +87,14 @@ class RepositoryContractTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             temp_root = Path(temporary)
             shutil.copy(ROOT / "STATE.json", temp_root / "STATE.json")
+            prepared = json.loads(
+                (temp_root / "STATE.json").read_text(encoding="utf-8")
+            )
+            prepared["run"]["status"] = "completed"
+            prepared["run"]["dirty_shutdown"] = False
+            (temp_root / "STATE.json").write_text(
+                json.dumps(prepared, indent=2) + "\n", encoding="utf-8"
+            )
             state = bootstrap.start_run(temp_root, minutes=60, max_experiments=2)
             self.assertEqual("orienting", state["run"]["status"])
             self.assertTrue(state["run"]["dirty_shutdown"])
@@ -121,7 +136,8 @@ class RepositoryContractTests(unittest.TestCase):
             shutil.copytree(ROOT, temp_root)
             for cache in temp_root.rglob("__pycache__"):
                 shutil.rmtree(cache)
-            shutil.rmtree(temp_root / "results" / "E-0001", ignore_errors=True)
+            shutil.rmtree(temp_root / "results", ignore_errors=True)
+            (temp_root / "results").mkdir()
             ledger_lines = (temp_root / "EXPERIMENTS.jsonl").read_text(
                 encoding="utf-8"
             ).splitlines()
@@ -328,6 +344,12 @@ class RepositoryContractTests(unittest.TestCase):
                 (temp_root / "STATE.json").read_text(encoding="utf-8")
             )
             self.assertEqual(completed, state_replayed["budget"]["experiments_completed"])
+            self.assertEqual("completed", state_replayed["run"]["status"])
+            self.assertFalse(state_replayed["run"]["dirty_shutdown"])
+            self.assertEqual(
+                "Add a strategy-specific null baseline.",
+                state_replayed["next_actions"][0]["description"],
+            )
 
     def test_historical_generation_remains_valid_after_generation_bump(self):
         records = validator.load_ledger(ROOT / "EXPERIMENTS.jsonl", [])
@@ -337,7 +359,7 @@ class RepositoryContractTests(unittest.TestCase):
                 for record in records
             )
         )
-        self.assertEqual("G-0002", json.loads(
+        self.assertEqual("G-0003", json.loads(
             (ROOT / "CORE_MANIFEST.json").read_text(encoding="utf-8")
         )["system_generation"])
         self.assertEqual([], validator.validate(ROOT))

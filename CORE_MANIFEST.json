@@ -1,7 +1,7 @@
 {
   "schema_version": "1.0.0",
-  "system_generation": "G-0002",
-  "created_at": "2026-08-05T15:40:00Z",
+  "system_generation": "G-0003",
+  "created_at": "2026-08-05T18:02:00Z",
   "protected_files": [
     "MISSION.md",
     "CORE_MANIFEST.json",
@@ -32,7 +32,7 @@
         },
         {
           "path": "scripts/finalize_experiment.py",
-          "sha256": "4103cfadfe400196eef2d9bb844d97663dbbbba4dcfafce09e873dcc0a47fc1f"
+          "sha256": "d1ddb598e049ad02644b98119ac468dc5760b86380269d61dbf737b6ce23e62f"
         },
         {
           "path": "scripts/preregister_experiment.py",
