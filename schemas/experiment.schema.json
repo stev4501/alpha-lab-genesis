@@ -1,0 +1,265 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://alpha-lab.local/schemas/experiment.schema.json",
+  "title": "Alpha Lab Experiment Record",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "experiment_id",
+    "run_id",
+    "hypothesis_id",
+    "parent_experiment_id",
+    "strategy_id",
+    "status",
+    "evidence_stage",
+    "created_at",
+    "started_at",
+    "finished_at",
+    "intent",
+    "design",
+    "results",
+    "validity",
+    "decision",
+    "artifacts",
+    "lineage"
+  ],
+  "properties": {
+    "schema_version": {"const": "1.0.0"},
+    "experiment_id": {"type": "string", "pattern": "^E-[0-9]{4,}$"},
+    "run_id": {"type": "string", "minLength": 1},
+    "hypothesis_id": {"type": "string", "pattern": "^H-[0-9]{4,}$"},
+    "parent_experiment_id": {"type": ["string", "null"], "pattern": "^E-[0-9]{4,}$"},
+    "strategy_id": {"type": "string", "pattern": "^S-[0-9]{4,}$"},
+    "status": {"enum": ["preregistered", "running", "completed", "failed", "aborted", "blocked"]},
+    "evidence_stage": {
+      "enum": ["bootstrap", "baseline", "discovery", "out_of_sample", "walk_forward", "paper"]
+    },
+    "created_at": {"type": "string", "format": "date-time"},
+    "started_at": {"type": ["string", "null"], "format": "date-time"},
+    "finished_at": {"type": ["string", "null"], "format": "date-time"},
+    "intent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["title", "rationale", "predicted_outcome"],
+      "properties": {
+        "title": {"type": "string", "minLength": 1},
+        "rationale": {"type": "string", "minLength": 1},
+        "predicted_outcome": {"type": "string", "minLength": 1}
+      }
+    },
+    "design": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "system_generation",
+        "evaluator_id",
+        "trial_family_id",
+        "trial_number",
+        "parameter_coordinates",
+        "holdout_access",
+        "strategy_entrypoint",
+        "strategy_sha256",
+        "initial_capital",
+        "code_commit",
+        "environment_id",
+        "random_seed",
+        "time_budget_minutes",
+        "data_manifest_version",
+        "data_manifest_sha256",
+        "dataset_ids",
+        "universe_id",
+        "discovery_window",
+        "confirmation_window",
+        "signal_timestamp_rule",
+        "execution_timestamp_rule",
+        "rebalance_rule",
+        "holding_period",
+        "benchmarks",
+        "cost_model_id",
+        "risk_policy_id",
+        "primary_metric",
+        "secondary_metrics",
+        "promotion_rule"
+      ],
+      "properties": {
+        "system_generation": {"type": "string", "pattern": "^G-[0-9]{4,}$"},
+        "evaluator_id": {"type": "string", "pattern": "^EV-[0-9]{4,}$"},
+        "trial_family_id": {"type": "string", "pattern": "^TF-[0-9]{4,}$"},
+        "trial_number": {"type": "integer", "minimum": 0},
+        "parameter_coordinates": {"type": "object"},
+        "holdout_access": {"type": "boolean"},
+        "strategy_entrypoint": {"type": ["string", "null"]},
+        "strategy_sha256": {
+          "type": ["string", "null"],
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "initial_capital": {"type": "number", "exclusiveMinimum": 0},
+        "code_commit": {"type": ["string", "null"]},
+        "environment_id": {"type": "string", "minLength": 1},
+        "random_seed": {"type": ["integer", "null"]},
+        "time_budget_minutes": {"type": "integer", "minimum": 1},
+        "data_manifest_version": {"type": "string", "minLength": 1},
+        "data_manifest_sha256": {
+          "type": ["string", "null"],
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "dataset_ids": {"type": "array", "items": {"type": "string"}},
+        "universe_id": {"type": ["string", "null"]},
+        "discovery_window": {"$ref": "#/$defs/window"},
+        "confirmation_window": {"$ref": "#/$defs/window"},
+        "signal_timestamp_rule": {"type": ["string", "null"]},
+        "execution_timestamp_rule": {"type": ["string", "null"]},
+        "rebalance_rule": {"type": ["string", "null"]},
+        "holding_period": {"type": ["string", "null"]},
+        "benchmarks": {"type": "array", "minItems": 1, "items": {"type": "string"}},
+        "cost_model_id": {"type": ["string", "null"]},
+        "risk_policy_id": {"type": ["string", "null"]},
+        "primary_metric": {"type": "string", "minLength": 1},
+        "secondary_metrics": {"type": "array", "items": {"type": "string"}},
+        "promotion_rule": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["operator", "criteria"],
+          "properties": {
+            "operator": {"enum": ["all", "any"]},
+            "criteria": {
+              "type": "array",
+              "minItems": 1,
+              "items": {"type": "string", "minLength": 1}
+            }
+          }
+        }
+      }
+    },
+    "results": {
+      "oneOf": [
+        {"type": "null"},
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "primary_metric_value",
+            "benchmark_metric_value",
+            "net_excess_return",
+            "sharpe_ratio",
+            "max_drawdown",
+            "turnover",
+            "trade_count",
+            "estimated_cost",
+            "confidence_interval",
+            "observations"
+          ],
+          "properties": {
+            "primary_metric_value": {"type": "number"},
+            "benchmark_metric_value": {"type": "number"},
+            "net_excess_return": {"type": "number"},
+            "total_return": {"type": "number"},
+            "annualized_return": {"type": "number"},
+            "annualized_volatility": {"type": "number", "minimum": 0},
+            "sharpe_ratio": {"type": ["number", "null"]},
+            "max_drawdown": {"type": "number", "minimum": 0, "maximum": 1},
+            "turnover": {"type": "number", "minimum": 0},
+            "turnover_notional": {"type": "number", "minimum": 0},
+            "trade_count": {"type": "integer", "minimum": 0},
+            "estimated_cost": {"type": "number", "minimum": 0},
+            "confidence_interval": {
+              "type": ["array", "null"],
+              "prefixItems": [{"type": "number"}, {"type": "number"}],
+              "minItems": 2,
+              "maxItems": 2
+            },
+            "observations": {"type": "integer", "minimum": 0}
+          }
+        }
+      ]
+    },
+    "validity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "preregistered",
+        "trial_budget_debited",
+        "purge_periods",
+        "embargo_periods",
+        "lookahead_check",
+        "survivorship_check",
+        "leakage_check",
+        "corporate_action_check",
+        "missing_data_check",
+        "multiple_testing_adjustment",
+        "independent_review"
+      ],
+      "properties": {
+        "preregistered": {"const": true},
+        "trial_budget_debited": {"type": "boolean"},
+        "purge_periods": {"type": ["integer", "null"], "minimum": 0},
+        "embargo_periods": {"type": ["integer", "null"], "minimum": 0},
+        "lookahead_check": {"$ref": "#/$defs/check"},
+        "survivorship_check": {"$ref": "#/$defs/check"},
+        "leakage_check": {"$ref": "#/$defs/check"},
+        "corporate_action_check": {"$ref": "#/$defs/check"},
+        "missing_data_check": {"$ref": "#/$defs/check"},
+        "multiple_testing_adjustment": {
+          "enum": ["not_applicable", "not_run", "passed", "failed", "warning"]
+        },
+        "independent_review": {"$ref": "#/$defs/check"}
+      }
+    },
+    "decision": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["outcome", "reason", "next_action", "next_evidence_stage"],
+      "properties": {
+        "outcome": {"enum": ["keep", "discard", "iterate", "promote", "demote", "block"]},
+        "reason": {"type": "string", "minLength": 1},
+        "next_action": {"type": "string", "minLength": 1},
+        "next_evidence_stage": {
+          "enum": ["bootstrap", "baseline", "discovery", "out_of_sample", "walk_forward", "paper"]
+        }
+      }
+    },
+    "artifacts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["path", "sha256", "media_type"],
+        "properties": {
+          "path": {"type": "string", "minLength": 1},
+          "sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+          "media_type": {"type": "string", "minLength": 1}
+        }
+      }
+    },
+    "lineage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["agent_id", "skill_versions", "tool_versions"],
+      "properties": {
+        "agent_id": {"type": "string", "minLength": 1},
+        "skill_versions": {"type": "object", "additionalProperties": {"type": "string"}},
+        "tool_versions": {"type": "object", "additionalProperties": {"type": "string"}}
+      }
+    }
+  },
+  "$defs": {
+    "window": {
+      "oneOf": [
+        {"type": "null"},
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["start", "end"],
+          "properties": {
+            "start": {"type": "string", "format": "date"},
+            "end": {"type": "string", "format": "date"}
+          }
+        }
+      ]
+    },
+    "check": {
+      "enum": ["not_run", "passed", "failed", "warning", "not_applicable"]
+    }
+  }
+}

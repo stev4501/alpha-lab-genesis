@@ -1,0 +1,229 @@
+{
+  "schema_version": 1,
+  "cases": [
+    {
+      "id": "P1-01",
+      "principle": "Reproduce Before Repairing",
+      "name": "Vague complaint does not trigger an edit",
+      "scenario": "A reviewer says the skill is too verbose but provides no input, output, or expected result.",
+      "expected": {
+        "classification": null,
+        "repair_mode": "none",
+        "actions": ["Request the exact input, actual output, and expected output.", "Do not propose a permanent instruction change."],
+        "forbidden": ["Add a be concise rule.", "Guess which section caused the verbosity."],
+        "completion_evidence": ["A rerunnable case with an observable pass/fail distinction."]
+      },
+      "tags": ["reproduction", "no-edit"]
+    },
+    {
+      "id": "P1-02",
+      "principle": "Reproduce Before Repairing",
+      "name": "Intermittent failure remains an evidence problem",
+      "scenario": "The same calendar request succeeds twice and fails once with no captured connector state.",
+      "expected": {
+        "classification": null,
+        "repair_mode": "none",
+        "actions": ["Capture failure conditions and connector state.", "Treat Capability Gap as a hypothesis, not a conclusion."],
+        "forbidden": ["Add retry instructions without evidence.", "Classify the issue as Knowledge Gap."],
+        "completion_evidence": ["Conditions that distinguish a passing run from a failing run."]
+      },
+      "tags": ["reproduction", "intermittent"]
+    },
+    {
+      "id": "P2-01",
+      "principle": "Establish Capability and Ownership",
+      "name": "Disconnected connector routes to dependency owner",
+      "scenario": "Calendar retrieval returns nothing because the connector is disconnected; the skill instructions are otherwise sufficient.",
+      "expected": {
+        "classification": "Capability",
+        "repair_mode": "route-away",
+        "actions": ["Report the disconnected dependency.", "Leave skill instructions unchanged unless silent failure is the reported defect."],
+        "forbidden": ["Add calendar retrieval rules.", "Classify the issue as Knowledge Gap."],
+        "completion_evidence": ["The failed dependency and its owner are named."]
+      },
+      "tags": ["boundary", "capability", "no-edit"]
+    },
+    {
+      "id": "P2-02",
+      "principle": "Establish Capability and Ownership",
+      "name": "Silent dependency failure permits one graceful fallback",
+      "scenario": "A disconnected connector causes the skill to claim success instead of reporting that retrieval was unavailable.",
+      "expected": {
+        "classification": "Capability",
+        "repair_mode": "instance",
+        "actions": ["Add one narrow instruction to disclose connector unavailability and stop.", "Route the connector outage to its owner."],
+        "forbidden": ["Add alternate calendar logic.", "Broaden the skill's responsibility."],
+        "completion_evidence": ["Unavailable retrieval is surfaced instead of reported as success."]
+      },
+      "tags": ["boundary", "capability", "graceful-degradation"]
+    },
+    {
+      "id": "P2-03",
+      "principle": "Establish Capability and Ownership",
+      "name": "Out-of-scope request narrows routing",
+      "scenario": "A commit-message skill is invoked to review a pull request and produces a weak review.",
+      "expected": {
+        "classification": "Scope",
+        "repair_mode": "route-away",
+        "actions": ["Narrow the trigger or decline the request.", "Route to the pull-request review owner."],
+        "forbidden": ["Add review instructions to the commit-message skill.", "Classify weak review content as Knowledge Gap."],
+        "completion_evidence": ["The correct owner is named and the misrouting path is closed."]
+      },
+      "tags": ["boundary", "scope", "no-edit"]
+    },
+    {
+      "id": "P2-04",
+      "principle": "Establish Capability and Ownership",
+      "name": "Boundary classification takes precedence over content",
+      "scenario": "An out-of-scope request also exposes a factual omission in the invoked skill's output.",
+      "expected": {
+        "classification": "Scope",
+        "repair_mode": "route-away",
+        "actions": ["Resolve the ownership error before considering content.", "Do not diagnose instructions for a case the skill should not own."],
+        "forbidden": ["Patch the factual omission in the misrouted skill."],
+        "completion_evidence": ["The out-of-scope path no longer invokes the skill."]
+      },
+      "tags": ["boundary", "scope", "precedence"]
+    },
+    {
+      "id": "P3-01",
+      "principle": "Classify the Defect Mechanism",
+      "name": "Missing stable format is a Knowledge Gap",
+      "scenario": "A document skill uses arbitrary filenames because the required YYYYMMDD prefix is absent from its instructions.",
+      "expected": {
+        "classification": "Knowledge",
+        "repair_mode": "instance",
+        "actions": ["Add the exact filename convention.", "Explain that the ingestion parser depends on the date prefix."],
+        "forbidden": ["Add a broad always use descriptive filenames rule."],
+        "completion_evidence": ["The required format and its operational reason are explicit."]
+      },
+      "tags": ["content", "knowledge", "instance"]
+    },
+    {
+      "id": "P3-02",
+      "principle": "Classify the Defect Mechanism",
+      "name": "Misapplied depth is a Judgment Gap",
+      "scenario": "The skill knows all required facts but produces a two-page report for a one-line status request.",
+      "expected": {
+        "classification": "Judgment",
+        "repair_mode": "instance",
+        "actions": ["Rewrite the existing depth instruction to calibrate detail to decision and audit weight."],
+        "forbidden": ["Add an always be brief rule.", "Remove required depth for corrective-action analysis."],
+        "completion_evidence": ["The instruction states when short and detailed outputs are appropriate."]
+      },
+      "tags": ["content", "judgment", "instance"]
+    },
+    {
+      "id": "P3-03",
+      "principle": "Classify the Defect Mechanism",
+      "name": "Conflicting constraints are a Behavioral Regression",
+      "scenario": "A new under-ten-steps rule causes troubleshooting output to omit mandatory alarm context that previously appeared.",
+      "expected": {
+        "classification": "Regression",
+        "repair_mode": "instance",
+        "actions": ["Merge the length and alarm-context constraints into one ordered principle.", "Preserve mandatory context before optimizing length."],
+        "forbidden": ["Add a third exception rule.", "Delete the alarm-context invariant."],
+        "completion_evidence": ["Both required context and calibrated length coexist without conflict."]
+      },
+      "tags": ["content", "regression", "instance"]
+    },
+    {
+      "id": "P4-01",
+      "principle": "Fix the Narrowest Root Cause",
+      "name": "Fast-changing model roster is externalized",
+      "scenario": "A model-selection skill repeatedly becomes stale because current model versions are hardcoded in SKILL.md.",
+      "expected": {
+        "classification": "Knowledge",
+        "repair_mode": "class-level",
+        "actions": ["Resolve model availability at run time from the maintained catalog.", "Remove hardcoded version strings."],
+        "forbidden": ["Replace old model versions with today's versions.", "Add another reminder to keep the list current."],
+        "completion_evidence": ["The skill has one maintained runtime source for the changing roster."]
+      },
+      "tags": ["content", "knowledge", "class-level", "rate-of-change"]
+    },
+    {
+      "id": "P4-02",
+      "principle": "Fix the Narrowest Root Cause",
+      "name": "Stable schema remains an instance repair",
+      "scenario": "A fixed frontmatter schema omits one allowed field and has not changed in years.",
+      "expected": {
+        "classification": "Knowledge",
+        "repair_mode": "instance",
+        "actions": ["Add the missing stable field and its purpose."],
+        "forbidden": ["Build a runtime schema service.", "Introduce configuration machinery for a stable value."],
+        "completion_evidence": ["The stable schema is complete without new infrastructure."]
+      },
+      "tags": ["content", "knowledge", "instance", "yagni"]
+    },
+    {
+      "id": "P5-01",
+      "principle": "Prefer Deletion and Consolidation",
+      "name": "Duplicate guidance is merged before adding rules",
+      "scenario": "Three sections repeat slightly different requirements for citing sources, and QA finds inconsistent citation placement.",
+      "expected": {
+        "classification": "Regression",
+        "repair_mode": "class-level",
+        "actions": ["Create one authoritative citation policy.", "Delete overlapping normative copies.", "Keep only role-specific pointers if necessary."],
+        "forbidden": ["Add a fourth citation rule.", "Leave contradictory copies in place."],
+        "completion_evidence": ["One authoritative policy remains and instruction count does not increase."]
+      },
+      "tags": ["deletion", "consolidation", "single-source-of-truth"]
+    },
+    {
+      "id": "P5-02",
+      "principle": "Prefer Deletion and Consolidation",
+      "name": "Long cohesive skill is not split prematurely",
+      "scenario": "A long skill has one invocation, one owner, and one end-to-end completion criterion, but its branch-specific examples are bulky.",
+      "expected": {
+        "classification": "Judgment",
+        "repair_mode": "class-level",
+        "actions": ["Prune duplication.", "Move branch-specific examples behind a contextual reference.", "Keep the cohesive workflow together."],
+        "forbidden": ["Create a new top-level skill based only on line count."],
+        "completion_evidence": ["Core workflow remains cohesive and rare detail is progressively disclosed."]
+      },
+      "tags": ["information-hierarchy", "no-split", "consolidation"]
+    },
+    {
+      "id": "P6-01",
+      "principle": "Verify Behavior and Surrounding Contracts",
+      "name": "Broken caller contract expands verification, not scope",
+      "scenario": "A trigger clarification changes wording consumed by one complementary routing skill; two unrelated skills also mention the domain.",
+      "expected": {
+        "classification": "Scope",
+        "repair_mode": "instance",
+        "actions": ["Rerun the target case.", "Test the complementary router.", "Update only the caller whose existing contract broke.", "Document why unrelated skills need no change."],
+        "forbidden": ["Patch every skill mentioning the domain.", "Skip adjacent-case validation."],
+        "completion_evidence": ["Target and affected caller pass; unaffected callers have a no-change rationale."]
+      },
+      "tags": ["blast-radius", "contracts", "adjacent-cases"]
+    },
+    {
+      "id": "P6-02",
+      "principle": "Verify Behavior and Surrounding Contracts",
+      "name": "Missing change-control owner uses disclosed fallback",
+      "scenario": "The user explicitly requests a skill edit, validation passes, but skill-change-control is unavailable.",
+      "expected": {
+        "classification": "Capability",
+        "repair_mode": "route-away",
+        "actions": ["Disclose the unavailable change-control owner.", "Use the validated create-skill save workflow because the user explicitly requested the edit."],
+        "forbidden": ["Pretend change control ran.", "Silently abandon the requested edit."],
+        "completion_evidence": ["Capability gap is disclosed and the validated package is saved through the authorized fallback."]
+      },
+      "tags": ["capability", "fallback", "change-control"]
+    },
+    {
+      "id": "P6-03",
+      "principle": "Verify Behavior and Surrounding Contracts",
+      "name": "Incomplete checkpoint blocks save",
+      "scenario": "The target case passes, but the checkpoint omits blast-radius results and preserved invariants.",
+      "expected": {
+        "classification": "Regression",
+        "repair_mode": "none",
+        "actions": ["Block the save.", "Complete caller checks and name preserved invariants."],
+        "forbidden": ["Treat package validation alone as sufficient.", "Save with missing checkpoint fields."],
+        "completion_evidence": ["Every checkpoint field is complete and package validation passes."]
+      },
+      "tags": ["checkpoint", "save-gate", "no-save"]
+    }
+  ]
+}

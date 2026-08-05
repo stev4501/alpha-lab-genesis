@@ -1,0 +1,73 @@
+{
+  "schema_version": "1.0.0",
+  "manifest_version": "1.0.0",
+  "updated_at": "2026-08-05T15:25:26Z",
+  "integrity_status": "validated",
+  "datasets": [
+    {
+      "dataset_id": "D-0001",
+      "provider": "Perplexity Realtime Finance Data",
+      "retrieval_tool": "finance_ohlcv_histories",
+      "path": "data/SPY_2024-01-02_2025-12-31_1day.csv",
+      "retrieved_at": "2026-08-05T15:24:03.592110Z",
+      "as_of": "2025-12-31T21:00:00Z",
+      "start_date": "2024-01-02",
+      "end_date": "2025-12-31",
+      "frequency": "1day",
+      "fields": ["open", "high", "low", "close", "volume"],
+      "timezone": "America/New_York",
+      "point_in_time": true,
+      "survivorship_free": true,
+      "corporate_action_policy": "Provider-supplied OHLCV used without transformation; price returns only and distributions excluded.",
+      "revision_policy": "Immutable retrieval snapshot; corrections require a new dataset ID and checksum.",
+      "license": "Connector-provided market data for research use; redistribution rights not asserted.",
+      "checksum": "225556599a155026d0032b428d3db60b59ee875c41581c9bf1bc7019a1d2ea30",
+      "status": "validated"
+    }
+  ],
+  "universes": [
+    {
+      "universe_id": "U-0001",
+      "name": "SPY single-instrument baseline",
+      "membership_rule": "SPY only for the full registered interval.",
+      "effective_dating": "Static from 2024-01-02 through 2025-12-31.",
+      "status": "validated"
+    }
+  ],
+  "cost_models": [
+    {
+      "cost_model_id": "C-0001",
+      "commission_per_share": 0.005,
+      "minimum_commission": 1.0,
+      "slippage_bps": 2.0,
+      "market_impact_bps": 0.0,
+      "status": "validated"
+    }
+  ],
+  "risk_policies": [
+    {
+      "risk_policy_id": "R-0001",
+      "max_gross_exposure": 1.0,
+      "max_position_weight": 1.0,
+      "max_drawdown": 0.25,
+      "liquidity_rule": "SPY only; integer shares; no leverage or shorting.",
+      "status": "validated"
+    }
+  ],
+  "validation": {
+    "validated_at": "2026-08-05T15:25:26Z",
+    "validator": "data-integrity",
+    "checks": [
+      "502 unique rows in ascending session order",
+      "Required OHLCV fields present",
+      "All prices positive and OHLC envelopes valid",
+      "Volume non-negative",
+      "Single SPY symbol and no missing registered sessions",
+      "SHA-256 checksum recorded"
+    ],
+    "open_issues": [
+      "Provider adjustment semantics are not exposed by the connector.",
+      "Distributions are excluded, so this dataset supports price-return evaluation only."
+    ]
+  }
+}

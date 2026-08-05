@@ -1,0 +1,18 @@
+{
+  "schema_version": "1.0.0",
+  "experiment_id": "E-0001",
+  "reviewer_id": "evidence-review-agent",
+  "reviewed_at": "2026-08-05T15:26:48.990118Z",
+  "decision": "block",
+  "findings": [
+    "The first signal was produced after 2024-01-02 close and the first fill correctly occurred at 2024-01-03 open.",
+    "The strategy return begins from the second-session fill while the benchmark return begins from the first-session open, so net excess return is not a like-for-like comparison.",
+    "All generated artifacts and checksums reconcile, but the preregistered benchmark criterion failed and the performance comparison is not decision-valid."
+  ],
+  "next_action": "Request approval for EV-0002 in generation G-0002 with benchmark entry aligned to the strategy execution clock.",
+  "independent_review": "passed",
+  "promotion_criteria_passed": false,
+  "reviewed_primary_metric": "net_excess_return",
+  "reviewed_primary_metric_value": 0.003892553335710147,
+  "validity_failures": []
+}

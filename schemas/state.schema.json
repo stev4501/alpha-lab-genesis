@@ -1,0 +1,225 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://alpha-lab.local/schemas/state.schema.json",
+  "title": "Alpha Lab Materialized State",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "revision",
+    "updated_at",
+    "run",
+    "objective",
+    "budget",
+    "data",
+    "paper_account",
+    "blockers",
+    "next_actions",
+    "handoff",
+    "integrity"
+  ],
+  "properties": {
+    "schema_version": {"const": "1.0.0"},
+    "revision": {"type": "integer", "minimum": 0},
+    "updated_at": {"type": "string", "format": "date-time"},
+    "run": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "run_id",
+        "previous_run_id",
+        "status",
+        "started_at",
+        "deadline_at",
+        "reserve_minutes",
+        "dirty_shutdown"
+      ],
+      "properties": {
+        "run_id": {"type": ["string", "null"]},
+        "previous_run_id": {"type": ["string", "null"]},
+        "status": {
+          "enum": ["not_started", "orienting", "executing", "closing", "completed", "failed"]
+        },
+        "started_at": {"type": ["string", "null"], "format": "date-time"},
+        "deadline_at": {"type": ["string", "null"], "format": "date-time"},
+        "reserve_minutes": {"type": "integer", "minimum": 5},
+        "dirty_shutdown": {"type": "boolean"}
+      }
+    },
+    "objective": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "system_generation",
+        "evidence_stage",
+        "active_hypothesis_id",
+        "active_experiment_id",
+        "champion_strategy_id",
+        "baseline_experiment_id"
+      ],
+      "properties": {
+        "system_generation": {"type": "string", "pattern": "^G-[0-9]{4,}$"},
+        "evidence_stage": {
+          "enum": ["bootstrap", "baseline", "discovery", "out_of_sample", "walk_forward", "paper"]
+        },
+        "active_hypothesis_id": {"type": ["string", "null"], "pattern": "^H-[0-9]{4,}$"},
+        "active_experiment_id": {"type": ["string", "null"], "pattern": "^E-[0-9]{4,}$"},
+        "champion_strategy_id": {"type": ["string", "null"], "pattern": "^S-[0-9]{4,}$"},
+        "baseline_experiment_id": {"type": ["string", "null"], "pattern": "^E-[0-9]{4,}$"}
+      }
+    },
+    "budget": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "session_minutes",
+        "used_minutes",
+        "max_experiments",
+        "experiments_completed",
+        "trial_budget",
+        "trials_consumed",
+        "holdout_touch_budget",
+        "holdout_touches"
+      ],
+      "properties": {
+        "session_minutes": {"type": "integer", "minimum": 0},
+        "used_minutes": {"type": "integer", "minimum": 0},
+        "max_experiments": {"type": "integer", "minimum": 1},
+        "experiments_completed": {"type": "integer", "minimum": 0},
+        "trial_budget": {"type": "integer", "minimum": 1},
+        "trials_consumed": {"type": "integer", "minimum": 0},
+        "holdout_touch_budget": {"type": "integer", "minimum": 0},
+        "holdout_touches": {"type": "integer", "minimum": 0}
+      }
+    },
+    "data": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["manifest_path", "integrity_status", "latest_market_as_of"],
+      "properties": {
+        "manifest_path": {"const": "DATA_MANIFEST.json"},
+        "integrity_status": {"enum": ["unverified", "blocked", "partial", "validated"]},
+        "latest_market_as_of": {"type": ["string", "null"], "format": "date"}
+      }
+    },
+    "paper_account": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "account_id",
+        "as_of",
+        "base_currency",
+        "equity",
+        "cash",
+        "gross_exposure",
+        "net_exposure",
+        "peak_equity",
+        "drawdown"
+      ],
+      "properties": {
+        "account_id": {"type": ["string", "null"]},
+        "as_of": {"type": ["string", "null"], "format": "date-time"},
+        "base_currency": {"type": "string", "minLength": 3, "maxLength": 3},
+        "equity": {"type": "number"},
+        "cash": {"type": "number"},
+        "gross_exposure": {"type": "number", "minimum": 0},
+        "net_exposure": {"type": "number"},
+        "peak_equity": {"type": "number", "minimum": 0},
+        "drawdown": {"type": "number", "minimum": 0, "maximum": 1}
+      }
+    },
+    "blockers": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/blocker"}
+    },
+    "next_actions": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/action"}
+    },
+    "handoff": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "summary",
+        "last_verified_artifacts",
+        "next_action_id",
+        "unresolved_risks"
+      ],
+      "properties": {
+        "summary": {"type": "string", "minLength": 1},
+        "last_verified_artifacts": {
+          "type": "array",
+          "items": {"type": "string"}
+        },
+        "next_action_id": {"type": ["string", "null"], "pattern": "^A-[0-9]{4,}$"},
+        "unresolved_risks": {
+          "type": "array",
+          "items": {"type": "string"}
+        }
+      }
+    },
+    "integrity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "last_validation_at",
+        "last_experiment_id",
+        "validation_status"
+      ],
+      "properties": {
+        "last_validation_at": {"type": ["string", "null"], "format": "date-time"},
+        "last_experiment_id": {"type": "string", "pattern": "^E-[0-9]{4,}$"},
+        "validation_status": {"enum": ["pending", "valid", "invalid"]}
+      }
+    }
+  },
+  "$defs": {
+    "blocker": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "blocker_id",
+        "severity",
+        "status",
+        "description",
+        "owner",
+        "next_check"
+      ],
+      "properties": {
+        "blocker_id": {"type": "string", "pattern": "^B-[0-9]{4,}$"},
+        "severity": {"enum": ["critical", "high", "medium", "low"]},
+        "status": {"enum": ["open", "monitoring", "resolved"]},
+        "description": {"type": "string", "minLength": 1},
+        "owner": {"type": "string", "minLength": 1},
+        "next_check": {"type": "string", "minLength": 1}
+      }
+    },
+    "action": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "action_id",
+        "priority",
+        "expected_information_gain",
+        "estimated_minutes",
+        "skill",
+        "description",
+        "success_criterion",
+        "prerequisites"
+      ],
+      "properties": {
+        "action_id": {"type": "string", "pattern": "^A-[0-9]{4,}$"},
+        "priority": {"type": "integer", "minimum": 1},
+        "expected_information_gain": {"type": "number", "minimum": 0, "maximum": 1},
+        "estimated_minutes": {"type": "integer", "minimum": 1},
+        "skill": {"type": "string", "minLength": 1},
+        "description": {"type": "string", "minLength": 1},
+        "success_criterion": {"type": "string", "minLength": 1},
+        "prerequisites": {
+          "type": "array",
+          "items": {"type": "string"}
+        }
+      }
+    }
+  }
+}

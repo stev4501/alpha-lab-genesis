@@ -1,0 +1,143 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://alpha-lab.local/schemas/data-manifest.schema.json",
+  "title": "Alpha Lab Data Manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "manifest_version",
+    "updated_at",
+    "integrity_status",
+    "datasets",
+    "universes",
+    "cost_models",
+    "risk_policies",
+    "validation"
+  ],
+  "properties": {
+    "schema_version": {"const": "1.0.0"},
+    "manifest_version": {"type": "string", "minLength": 1},
+    "updated_at": {"type": "string", "format": "date-time"},
+    "integrity_status": {"enum": ["unverified", "blocked", "partial", "validated"]},
+    "datasets": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "dataset_id",
+          "provider",
+          "retrieval_tool",
+          "path",
+          "retrieved_at",
+          "as_of",
+          "start_date",
+          "end_date",
+          "frequency",
+          "fields",
+          "timezone",
+          "point_in_time",
+          "survivorship_free",
+          "corporate_action_policy",
+          "revision_policy",
+          "license",
+          "checksum",
+          "status"
+        ],
+        "properties": {
+          "dataset_id": {"type": "string", "pattern": "^D-[0-9]{4,}$"},
+          "provider": {"type": "string", "minLength": 1},
+          "retrieval_tool": {"type": "string", "minLength": 1},
+          "path": {"type": "string", "minLength": 1},
+          "retrieved_at": {"type": "string", "format": "date-time"},
+          "as_of": {"type": "string", "format": "date-time"},
+          "start_date": {"type": "string", "format": "date"},
+          "end_date": {"type": "string", "format": "date"},
+          "frequency": {"type": "string", "minLength": 1},
+          "fields": {"type": "array", "minItems": 1, "items": {"type": "string"}},
+          "timezone": {"type": "string", "minLength": 1},
+          "point_in_time": {"type": "boolean"},
+          "survivorship_free": {"type": "boolean"},
+          "corporate_action_policy": {"type": "string", "minLength": 1},
+          "revision_policy": {"type": "string", "minLength": 1},
+          "license": {"type": "string", "minLength": 1},
+          "checksum": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+          "status": {"enum": ["unverified", "blocked", "validated", "retired"]}
+        }
+      }
+    },
+    "universes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["universe_id", "name", "membership_rule", "effective_dating", "status"],
+        "properties": {
+          "universe_id": {"type": "string", "pattern": "^U-[0-9]{4,}$"},
+          "name": {"type": "string", "minLength": 1},
+          "membership_rule": {"type": "string", "minLength": 1},
+          "effective_dating": {"type": "string", "minLength": 1},
+          "status": {"enum": ["unverified", "validated", "retired"]}
+        }
+      }
+    },
+    "cost_models": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "cost_model_id",
+          "commission_per_share",
+          "minimum_commission",
+          "slippage_bps",
+          "market_impact_bps",
+          "status"
+        ],
+        "properties": {
+          "cost_model_id": {"type": "string", "pattern": "^C-[0-9]{4,}$"},
+          "commission_per_share": {"type": "number", "minimum": 0},
+          "minimum_commission": {"type": "number", "minimum": 0},
+          "slippage_bps": {"type": "number", "exclusiveMinimum": 0},
+          "market_impact_bps": {"type": "number", "minimum": 0},
+          "status": {"enum": ["unverified", "validated", "retired"]}
+        }
+      }
+    },
+    "risk_policies": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "risk_policy_id",
+          "max_gross_exposure",
+          "max_position_weight",
+          "max_drawdown",
+          "liquidity_rule",
+          "status"
+        ],
+        "properties": {
+          "risk_policy_id": {"type": "string", "pattern": "^R-[0-9]{4,}$"},
+          "max_gross_exposure": {"type": "number", "minimum": 0},
+          "max_position_weight": {"type": "number", "minimum": 0, "maximum": 1},
+          "max_drawdown": {"type": "number", "minimum": 0, "maximum": 1},
+          "liquidity_rule": {"type": "string", "minLength": 1},
+          "status": {"enum": ["unverified", "validated", "retired"]}
+        }
+      }
+    },
+    "validation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["validated_at", "validator", "checks", "open_issues"],
+      "properties": {
+        "validated_at": {"type": ["string", "null"], "format": "date-time"},
+        "validator": {"type": ["string", "null"]},
+        "checks": {"type": "array", "items": {"type": "string"}},
+        "open_issues": {"type": "array", "items": {"type": "string"}}
+      }
+    }
+  }
+}

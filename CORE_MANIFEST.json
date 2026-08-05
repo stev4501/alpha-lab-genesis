@@ -1,0 +1,62 @@
+{
+  "schema_version": "1.0.0",
+  "system_generation": "G-0001",
+  "created_at": "2026-08-05T05:16:00Z",
+  "protected_files": [
+    "MISSION.md",
+    "CORE_MANIFEST.json",
+    "schemas/state.schema.json",
+    "schemas/experiment.schema.json",
+    "schemas/data-manifest.schema.json"
+  ],
+  "sealed_components": [
+    {
+      "component_id": "EV-0001",
+      "name": "experiment-contract",
+      "paths": [
+        {
+          "path": "schemas/experiment.schema.json",
+          "sha256": "f74bd35f96d4a5dc3da5e22ac3be336c6f5a7571e06f4a3998af59f23845e080"
+        },
+        {
+          "path": "scripts/validate_repository.py",
+          "sha256": "65622e6c27b62ba3772d1afdfb73aa96d1b09e520cf56e0af2766a3ed9610d45"
+        },
+        {
+          "path": "evaluator/daily_bar.py",
+          "sha256": "56f7a983df1e497dbbace91a2dd684575989dfeb020609178b58be8fbd30251d"
+        },
+        {
+          "path": "scripts/record_evidence_review.py",
+          "sha256": "4f322b40ae44e40a1e3ba1e464428968d8e2e74cf57fb4a47f25432ac45af825"
+        },
+        {
+          "path": "scripts/finalize_experiment.py",
+          "sha256": "4103cfadfe400196eef2d9bb844d97663dbbbba4dcfafce09e873dcc0a47fc1f"
+        },
+        {
+          "path": "scripts/preregister_experiment.py",
+          "sha256": "8f1a8a56d3b0e2f577ac16ddcd861abb384f89be2122226d1b2c54c2d261bad1"
+        }
+      ],
+      "status": "sealed"
+    }
+  ],
+  "core_skills": [
+    {"name": "genesis-orchestrator", "version": "0.1.0"},
+    {"name": "hypothesis-engine", "version": "0.1.0"},
+    {"name": "experiment-loop", "version": "0.1.0"},
+    {"name": "data-integrity", "version": "0.1.0"},
+    {"name": "evidence-gate", "version": "0.1.0"},
+    {"name": "paper-execution", "version": "0.1.0"},
+    {"name": "memory-handoff", "version": "0.1.0"},
+    {"name": "skill-lifecycle-governance", "version": "0.1.0"},
+    {"name": "anti-degradation-triage", "version": "3.1"}
+  ],
+  "change_policy": {
+    "human_approval_required": true,
+    "generation_bump_required": true,
+    "cross_generation_results_directly_comparable": false,
+    "failed_skill_changes_retained": true
+  }
+}

@@ -1,0 +1,32 @@
+{
+  "experiment_id": "E-0001",
+  "evaluator_id": "EV-0001",
+  "system_generation": "G-0001",
+  "artifacts": [
+    {
+      "path": "results/E-0001/metrics.json",
+      "sha256": "5774d0c037d435e075d7ec5689381f55f1da2a63f45391ef97a51c5a5a990caf",
+      "media_type": "application/json"
+    },
+    {
+      "path": "results/E-0001/validity.json",
+      "sha256": "bcfa941c66af69c70bedcce6795520b49877f35daca50136f24546f6aef51c71",
+      "media_type": "application/json"
+    },
+    {
+      "path": "results/E-0001/equity.csv",
+      "sha256": "7e67e287634ac6773aaa27b69f0a075986481a5b81c231f3c6621f375e061805",
+      "media_type": "text/csv"
+    },
+    {
+      "path": "results/E-0001/trades.csv",
+      "sha256": "2463340f37941f82f4e52081eeca0369ec18d7fdad848c0bfe6a6a54a0e0272a",
+      "media_type": "text/csv"
+    },
+    {
+      "path": "results/E-0001/run.log",
+      "sha256": "56aa6d3fd41db21c48651449d04d6a4a4957c612464b475df25a034f3ae5bb13",
+      "media_type": "text/plain"
+    }
+  ]
+}
