@@ -1,13 +1,13 @@
 {
   "schema_version": "1.0.0",
-  "revision": 13,
-  "updated_at": "2026-08-06T01:26:00Z",
+  "revision": 14,
+  "updated_at": "2026-08-06T20:16:25Z",
   "run": {
-    "run_id": "R-20260806T011739Z-919140",
-    "previous_run_id": "R-20260805T175503Z-fa81cf",
+    "run_id": "R-20260806T193700Z-a0007",
+    "previous_run_id": "R-20260806T011739Z-919140",
     "status": "completed",
-    "started_at": "2026-08-06T01:17:39.415905Z",
-    "deadline_at": "2026-08-06T02:47:39.415905Z",
+    "started_at": "2026-08-06T19:37:00Z",
+    "deadline_at": "2026-08-06T21:07:00Z",
     "reserve_minutes": 10,
     "dirty_shutdown": false
   },
@@ -21,7 +21,7 @@
   },
   "budget": {
     "session_minutes": 90,
-    "used_minutes": 9,
+    "used_minutes": 39,
     "max_experiments": 1,
     "experiments_completed": 0,
     "trial_budget": 20,
@@ -68,31 +68,47 @@
       "action_id": "A-0006",
       "priority": 1,
       "expected_information_gain": 0.9,
-      "estimated_minutes": 90,
+      "estimated_minutes": 75,
       "skill": "data-integrity",
       "description": "Retrieve current SPY daily data with an approved structured finance tool and register it as immutable snapshot D-0002.",
       "success_criterion": "D-0002 has later market coverage than D-0001, resolves by as-of time, matches its manifest checksum, and preserves D-0001 unchanged.",
       "prerequisites": []
+    },
+    {
+      "action_id": "A-0008",
+      "priority": 2,
+      "expected_information_gain": 0.85,
+      "estimated_minutes": 70,
+      "skill": "skill-lifecycle-governance",
+      "description": "Prepare the narrow G-0004 change proposal required to enforce ADR-0007, identify every protected or sealed change and bypass test, then stop for human approval.",
+      "success_criterion": "The proposal maps each required invariant to exact component changes, failing bypass tests, migration effects, rollback behavior, and approval points without modifying protected or sealed components under G-0003.",
+      "prerequisites": [
+        "A-0006 completed and D-0002 validated"
+      ]
     }
   ],
   "handoff": {
-    "summary": "A-0005 completed: content-addressed snapshot registration, as-of resolution, manifest binding, concurrency-safe idempotency, and D-0001 bootstrap registration passed independent review.",
+    "summary": "A-0007 records a proposed bounded strategy-evolution architecture without expanding G-0003 authority. A-0006 remains next. After D-0002 is validated, A-0008 prepares the G-0004 change proposal and stops for human approval.",
     "last_verified_artifacts": [
       "data/snapshots/index.jsonl",
       "data/snapshots/D-0001/225556599a155026d0032b428d3db60b59ee875c41581c9bf1bc7019a1d2ea30.csv",
       "data_adapters/immutable_snapshots.py",
       "scripts/register_market_snapshot.py",
       "tests/test_data_adapter.py",
-      "docs/adr/0006-content-addressed-data-snapshots.md"
+      "docs/adr/0006-content-addressed-data-snapshots.md",
+      "docs/adr/0007-bounded-strategy-evolution-loop.md",
+      "docs/scheduled-task-specification.md"
     ],
     "next_action_id": "A-0006",
     "unresolved_risks": [
       "No paper account",
-      "Distributions are excluded from D-0001"
+      "Distributions are excluded from D-0001",
+      "Strategy grammar, novelty checks, and multiple-testing enforcement are specified but not yet implemented",
+      "Forward-evidence collector is intentionally unscheduled"
     ]
   },
   "integrity": {
-    "last_validation_at": "2026-08-06T01:26:00Z",
+    "last_validation_at": "2026-08-06T20:16:25Z",
     "last_experiment_id": "E-0002",
     "validation_status": "valid"
   }
