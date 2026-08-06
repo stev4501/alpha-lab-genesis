@@ -34,6 +34,18 @@ executed after strategy-owned warm-up and begins the benchmark at that same
 open. `S-0002` is the versioned passive baseline with an explicit warm-up
 contract. `E-0001` remains immutable.
 
+#### A-0005 capability increment
+
+The data refresh boundary now registers each retrieval under a new dataset ID,
+copies bytes to a SHA-256-addressed path, and resolves the latest snapshot whose
+market `as_of` does not exceed the requested timestamp. `D-0001` is registered
+as the first immutable snapshot, and `DATA_MANIFEST.json` uses that snapshot as
+its canonical path.
+
+- Artifact: `data/snapshots/index.jsonl`
+- Validation: 20 tests, registry validation, repository validation, and independent review passed
+- Next action: retrieve and register current SPY daily data as `D-0002`
+
 ## Rejected
 
 None.

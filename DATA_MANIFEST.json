@@ -1,14 +1,14 @@
 {
   "schema_version": "1.0.0",
-  "manifest_version": "1.0.0",
-  "updated_at": "2026-08-05T15:25:26Z",
+  "manifest_version": "1.1.0",
+  "updated_at": "2026-08-06T01:24:00Z",
   "integrity_status": "validated",
   "datasets": [
     {
       "dataset_id": "D-0001",
       "provider": "Perplexity Realtime Finance Data",
       "retrieval_tool": "finance_ohlcv_histories",
-      "path": "data/SPY_2024-01-02_2025-12-31_1day.csv",
+      "path": "data/snapshots/D-0001/225556599a155026d0032b428d3db60b59ee875c41581c9bf1bc7019a1d2ea30.csv",
       "retrieved_at": "2026-08-05T15:24:03.592110Z",
       "as_of": "2025-12-31T21:00:00Z",
       "start_date": "2024-01-02",
@@ -55,7 +55,7 @@
     }
   ],
   "validation": {
-    "validated_at": "2026-08-05T15:25:26Z",
+    "validated_at": "2026-08-06T01:24:00Z",
     "validator": "data-integrity",
     "checks": [
       "502 unique rows in ascending session order",
@@ -63,7 +63,8 @@
       "All prices positive and OHLC envelopes valid",
       "Volume non-negative",
       "Single SPY symbol and no missing registered sessions",
-      "SHA-256 checksum recorded"
+      "SHA-256 checksum recorded",
+      "Canonical path resolved through immutable snapshot registry"
     ],
     "open_issues": [
       "Provider adjustment semantics are not exposed by the connector.",

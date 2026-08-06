@@ -1,13 +1,13 @@
 {
   "schema_version": "1.0.0",
-  "revision": 11,
-  "updated_at": "2026-08-05T18:04:00Z",
+  "revision": 13,
+  "updated_at": "2026-08-06T01:26:00Z",
   "run": {
-    "run_id": "R-20260805T175503Z-fa81cf",
-    "previous_run_id": "R-20260805T152457Z-001279",
+    "run_id": "R-20260806T011739Z-919140",
+    "previous_run_id": "R-20260805T175503Z-fa81cf",
     "status": "completed",
-    "started_at": "2026-08-05T17:55:03.591773Z",
-    "deadline_at": "2026-08-05T19:25:03.591773Z",
+    "started_at": "2026-08-06T01:17:39.415905Z",
+    "deadline_at": "2026-08-06T02:47:39.415905Z",
     "reserve_minutes": 10,
     "dirty_shutdown": false
   },
@@ -21,9 +21,9 @@
   },
   "budget": {
     "session_minutes": 90,
-    "used_minutes": 0,
+    "used_minutes": 9,
     "max_experiments": 1,
-    "experiments_completed": 1,
+    "experiments_completed": 0,
     "trial_budget": 20,
     "trials_consumed": 2,
     "holdout_touch_budget": 1,
@@ -65,35 +65,34 @@
   ],
   "next_actions": [
     {
-      "action_id": "A-0005",
+      "action_id": "A-0006",
       "priority": 1,
       "expected_information_gain": 0.9,
       "estimated_minutes": 90,
-      "skill": "pit-data-contract",
-      "description": "Add an immutable point-in-time data refresh adapter before forward paper scheduling.",
-      "success_criterion": "A validated immutable snapshot can be resolved by as-of time without changing prior dataset versions.",
+      "skill": "data-integrity",
+      "description": "Retrieve current SPY daily data with an approved structured finance tool and register it as immutable snapshot D-0002.",
+      "success_criterion": "D-0002 has later market coverage than D-0001, resolves by as-of time, matches its manifest checksum, and preserves D-0001 unchanged.",
       "prerequisites": []
     }
   ],
   "handoff": {
-    "summary": "E-0002 finalized as keep: EV-0002 passed independent evidence review: aligned clocks, next-open execution, artifact integrity, and portfolio reconciliation are decision-valid.",
+    "summary": "A-0005 completed: content-addressed snapshot registration, as-of resolution, manifest binding, concurrency-safe idempotency, and D-0001 bootstrap registration passed independent review.",
     "last_verified_artifacts": [
-      "results/E-0002/metrics.json",
-      "results/E-0002/validity.json",
-      "results/E-0002/equity.csv",
-      "results/E-0002/trades.csv",
-      "results/E-0002/run.log",
-      "results/E-0002/artifact-manifest.json",
-      "results/E-0002/review.json"
+      "data/snapshots/index.jsonl",
+      "data/snapshots/D-0001/225556599a155026d0032b428d3db60b59ee875c41581c9bf1bc7019a1d2ea30.csv",
+      "data_adapters/immutable_snapshots.py",
+      "scripts/register_market_snapshot.py",
+      "tests/test_data_adapter.py",
+      "docs/adr/0006-content-addressed-data-snapshots.md"
     ],
-    "next_action_id": "A-0005",
+    "next_action_id": "A-0006",
     "unresolved_risks": [
       "No paper account",
       "Distributions are excluded from D-0001"
     ]
   },
   "integrity": {
-    "last_validation_at": "2026-08-05T18:04:00Z",
+    "last_validation_at": "2026-08-06T01:26:00Z",
     "last_experiment_id": "E-0002",
     "validation_status": "valid"
   }
