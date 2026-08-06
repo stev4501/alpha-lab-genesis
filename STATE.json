@@ -1,13 +1,13 @@
 {
   "schema_version": "1.0.0",
-  "revision": 14,
-  "updated_at": "2026-08-06T20:16:25Z",
+  "revision": 15,
+  "updated_at": "2026-08-06T21:09:08Z",
   "run": {
-    "run_id": "R-20260806T193700Z-a0007",
-    "previous_run_id": "R-20260806T011739Z-919140",
+    "run_id": "R-20260806T202300Z-a0006",
+    "previous_run_id": "R-20260806T193700Z-a0007",
     "status": "completed",
-    "started_at": "2026-08-06T19:37:00Z",
-    "deadline_at": "2026-08-06T21:07:00Z",
+    "started_at": "2026-08-06T20:23:00Z",
+    "deadline_at": "2026-08-06T21:53:00Z",
     "reserve_minutes": 10,
     "dirty_shutdown": false
   },
@@ -21,7 +21,7 @@
   },
   "budget": {
     "session_minutes": 90,
-    "used_minutes": 39,
+    "used_minutes": 46,
     "max_experiments": 1,
     "experiments_completed": 0,
     "trial_budget": 20,
@@ -31,8 +31,8 @@
   },
   "data": {
     "manifest_path": "DATA_MANIFEST.json",
-    "integrity_status": "validated",
-    "latest_market_as_of": "2025-12-31"
+    "integrity_status": "partial",
+    "latest_market_as_of": null
   },
   "paper_account": {
     "account_id": null,
@@ -49,10 +49,10 @@
     {
       "blocker_id": "B-0001",
       "severity": "critical",
-      "status": "resolved",
+      "status": "open",
       "description": "No point-in-time market dataset has been validated.",
       "owner": "data-integrity",
-      "next_check": "Revalidate only when a new dataset snapshot is registered."
+      "next_check": "Resolve with B-0003 only after point-in-time provenance or a human-approved machine-enforced forward-only policy exists."
     },
     {
       "blocker_id": "B-0002",
@@ -61,17 +61,25 @@
       "description": "EV-0001 measures the strategy from its second-session fill but measures the benchmark from the first-session open.",
       "owner": "skill-lifecycle-governance",
       "next_check": "Reopen only if the EV-0002 regression test or E-0002 evidence review fails."
+    },
+    {
+      "blocker_id": "B-0003",
+      "severity": "high",
+      "status": "open",
+      "description": "D-0002 is immutable at retrieval time but the provider exposes no availability, completion, or revision metadata, so historical session-close point-in-time status is unverified.",
+      "owner": "data-integrity",
+      "next_check": "Resolve when an approved source proves publication/revision timing or a human approves a forward-only data-use boundary."
     }
   ],
   "next_actions": [
     {
-      "action_id": "A-0006",
+      "action_id": "A-0009",
       "priority": 1,
-      "expected_information_gain": 0.9,
-      "estimated_minutes": 75,
+      "expected_information_gain": 0.95,
+      "estimated_minutes": 60,
       "skill": "data-integrity",
-      "description": "Retrieve current SPY daily data with an approved structured finance tool and register it as immutable snapshot D-0002.",
-      "success_criterion": "D-0002 has later market coverage than D-0001, resolves by as-of time, matches its manifest checksum, and preserves D-0001 unchanged.",
+      "description": "Establish point-in-time provenance for SPY daily bars or prepare a narrow forward-only data-use policy for human approval.",
+      "success_criterion": "Retrieval gating is enforced and either historical availability/revision semantics are evidenced and machine-validated, or a human-approved policy is machine-enforced to restrict all affected datasets to decisions after retrieval.",
       "prerequisites": []
     },
     {
@@ -83,12 +91,12 @@
       "description": "Prepare the narrow G-0004 change proposal required to enforce ADR-0007, identify every protected or sealed change and bypass test, then stop for human approval.",
       "success_criterion": "The proposal maps each required invariant to exact component changes, failing bypass tests, migration effects, rollback behavior, and approval points without modifying protected or sealed components under G-0003.",
       "prerequisites": [
-        "A-0006 completed and D-0002 validated"
+        "A-0009 completed and B-0003 resolved"
       ]
     }
   ],
   "handoff": {
-    "summary": "A-0007 records a proposed bounded strategy-evolution architecture without expanding G-0003 authority. A-0006 remains next. After D-0002 is validated, A-0008 prepares the G-0004 change proposal and stops for human approval.",
+    "summary": "A-0006 registered immutable D-0002 and verified its shape, checksum, overlap, and later coverage, but independent review blocked point-in-time validation because provider availability and revision metadata are absent. A-0009 is next.",
     "last_verified_artifacts": [
       "data/snapshots/index.jsonl",
       "data/snapshots/D-0001/225556599a155026d0032b428d3db60b59ee875c41581c9bf1bc7019a1d2ea30.csv",
@@ -97,18 +105,26 @@
       "tests/test_data_adapter.py",
       "docs/adr/0006-content-addressed-data-snapshots.md",
       "docs/adr/0007-bounded-strategy-evolution-loop.md",
-      "docs/scheduled-task-specification.md"
+      "docs/scheduled-task-specification.md",
+      "data/snapshots/D-0002/711fe4515b644cf2278d414cfb4af98488b06e9488e8a468c1ec470931d83f81.csv",
+      "data/raw/D-0002/SPY_price_history_2024-01-02_2026-08-05_1day_raw.csv",
+      "data/provenance/D-0002.json",
+      "scripts/normalize_finance_ohlcv.py",
+      "DATA_MANIFEST.json",
+      "reviews/A-0006-independent-review.md",
+      "reviews/A-0006-model-council.md"
     ],
-    "next_action_id": "A-0006",
+    "next_action_id": "A-0009",
     "unresolved_risks": [
       "No paper account",
-      "Distributions are excluded from D-0001",
+      "Distributions are excluded from D-0001 and D-0002",
       "Strategy grammar, novelty checks, and multiple-testing enforcement are specified but not yet implemented",
-      "Forward-evidence collector is intentionally unscheduled"
+      "Forward-evidence collector is intentionally unscheduled",
+      "D-0002 is unverified for historical session-close point-in-time use"
     ]
   },
   "integrity": {
-    "last_validation_at": "2026-08-06T20:16:25Z",
+    "last_validation_at": "2026-08-06T21:09:08Z",
     "last_experiment_id": "E-0002",
     "validation_status": "valid"
   }

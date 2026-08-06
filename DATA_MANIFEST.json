@@ -1,8 +1,8 @@
 {
   "schema_version": "1.0.0",
-  "manifest_version": "1.1.0",
-  "updated_at": "2026-08-06T01:24:00Z",
-  "integrity_status": "validated",
+  "manifest_version": "1.2.0",
+  "updated_at": "2026-08-06T21:07:00Z",
+  "integrity_status": "partial",
   "datasets": [
     {
       "dataset_id": "D-0001",
@@ -16,13 +16,33 @@
       "frequency": "1day",
       "fields": ["open", "high", "low", "close", "volume"],
       "timezone": "America/New_York",
-      "point_in_time": true,
+      "point_in_time": false,
       "survivorship_free": true,
       "corporate_action_policy": "Provider-supplied OHLCV used without transformation; price returns only and distributions excluded.",
-      "revision_policy": "Immutable retrieval snapshot; corrections require a new dataset ID and checksum.",
+      "revision_policy": "Immutable retrieval-time snapshot. The provider exposes no publication, completion, or revision identifier and repeated retrievals may differ; corrections require a new dataset ID and checksum.",
       "license": "Connector-provided market data for research use; redistribution rights not asserted.",
       "checksum": "225556599a155026d0032b428d3db60b59ee875c41581c9bf1bc7019a1d2ea30",
-      "status": "validated"
+      "status": "unverified"
+    },
+    {
+      "dataset_id": "D-0002",
+      "provider": "Perplexity Realtime Finance Data",
+      "retrieval_tool": "finance_ohlcv_histories",
+      "path": "data/snapshots/D-0002/711fe4515b644cf2278d414cfb4af98488b06e9488e8a468c1ec470931d83f81.csv",
+      "retrieved_at": "2026-08-06T20:23:00Z",
+      "as_of": "2026-08-05T20:00:00Z",
+      "start_date": "2024-01-02",
+      "end_date": "2026-08-05",
+      "frequency": "1day",
+      "fields": ["open", "high", "low", "close", "volume"],
+      "timezone": "America/New_York",
+      "point_in_time": false,
+      "survivorship_free": true,
+      "corporate_action_policy": "Provider-supplied OHLCV normalized by inserting the constant SPY symbol and converting the generated header line ending to LF; numeric fields and row order are unchanged; price returns only and distributions excluded.",
+      "revision_policy": "Immutable retrieval-time snapshot. The provider exposes no publication, completion, or revision identifier and repeated retrievals may differ; corrections require a new dataset ID and checksum.",
+      "license": "Connector-provided market data for research use; redistribution rights not asserted.",
+      "checksum": "711fe4515b644cf2278d414cfb4af98488b06e9488e8a468c1ec470931d83f81",
+      "status": "unverified"
     }
   ],
   "universes": [
@@ -30,8 +50,8 @@
       "universe_id": "U-0001",
       "name": "SPY single-instrument baseline",
       "membership_rule": "SPY only for the full registered interval.",
-      "effective_dating": "Static from 2024-01-02 through 2025-12-31.",
-      "status": "validated"
+      "effective_dating": "Static from 2024-01-02 through 2026-08-05.",
+      "status": "unverified"
     }
   ],
   "cost_models": [
@@ -55,20 +75,26 @@
     }
   ],
   "validation": {
-    "validated_at": "2026-08-06T01:24:00Z",
+    "validated_at": null,
     "validator": "data-integrity",
     "checks": [
-      "502 unique rows in ascending session order",
+      "650 unique D-0002 rows in ascending session order",
       "Required OHLCV fields present",
       "All prices positive and OHLC envelopes valid",
       "Volume non-negative",
       "Single SPY symbol and no missing registered sessions",
       "SHA-256 checksum recorded",
-      "Canonical path resolved through immutable snapshot registry"
+      "Canonical paths resolved through immutable snapshot registry",
+      "D-0001 preserved byte-for-byte",
+      "D-0001 and D-0002 are identical across all 502 overlapping sessions",
+      "D-0002 adds 148 later sessions through its last included date, 2026-08-05",
+      "As-of resolution excludes snapshots until their retrieval timestamp"
     ],
     "open_issues": [
       "Provider adjustment semantics are not exposed by the connector.",
-      "Distributions are excluded, so this dataset supports price-return evaluation only."
+      "Distributions are excluded, so this dataset supports price-return evaluation only.",
+      "D-0002 is not verified point-in-time for historical session-close decisions because provider availability and revision metadata are unavailable.",
+      "D-0002 may be used only as an immutable retrieval-time snapshot at or after 2026-08-06T20:23:00Z unless a human approves a narrower use policy."
     ]
   }
 }

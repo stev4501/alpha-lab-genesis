@@ -76,8 +76,10 @@ def validate_record(root: Path, record: dict) -> list[str]:
     if not SERIES_ID.fullmatch(str(record["series_id"])):
         errors.append(f"Invalid series_id: {record['series_id']}")
     try:
-        parse_timestamp(record["as_of"])
-        parse_timestamp(record["retrieved_at"])
+        as_of = parse_timestamp(record["as_of"])
+        retrieved_at = parse_timestamp(record["retrieved_at"])
+        if retrieved_at < as_of:
+            errors.append("retrieved_at cannot precede as_of.")
     except (TypeError, ValueError) as exc:
         errors.append(str(exc))
     snapshot_path = root / record["snapshot_path"]
@@ -151,6 +153,8 @@ def register_snapshot(
         raise ValueError("series_id contains unsupported characters.")
     as_of = canonical_timestamp(as_of)
     retrieved_at = canonical_timestamp(retrieved_at)
+    if parse_timestamp(retrieved_at) < parse_timestamp(as_of):
+        raise ValueError("retrieved_at cannot precede as_of.")
     content_hash = sha256(source_path)
     extension = source_path.suffix.lower() or ".bin"
     relative_snapshot = (
@@ -202,6 +206,7 @@ def resolve_as_of(root: Path, series_id: str, as_of: str) -> dict:
         for record in load_index(root)
         if record.get("series_id") == series_id
         and parse_timestamp(record["as_of"]) <= cutoff
+        and parse_timestamp(record["retrieved_at"]) <= cutoff
     ]
     if not candidates:
         raise LookupError(f"No {series_id} snapshot exists at or before {as_of}.")

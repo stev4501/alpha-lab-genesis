@@ -1,0 +1,36 @@
+{
+  "dataset_id": "D-0002",
+  "provider": "Perplexity Realtime Finance Data",
+  "retrieval_tool": "finance_ohlcv_histories",
+  "retrieval_call_id": "call_39HatfHtOLYj7McWkErEqM4I",
+  "retrieved_at": "2026-08-06T20:23:00Z",
+  "request": {
+    "ticker_symbols": ["SPY"],
+    "start_date": "2024-01-02",
+    "end_date": "2026-08-05",
+    "time_interval": "1day",
+    "fields": ["open", "high", "low", "close", "volume"],
+    "extended_hours": false
+  },
+  "raw_artifact": {
+    "path": "data/raw/D-0002/SPY_price_history_2024-01-02_2026-08-05_1day_raw.csv",
+    "sha256": "9a5597e42d3a5f8a3bc95c4ee819c3207603ee681d98f7427a43dd6d41eddf37",
+    "bytes": 32983,
+    "line_endings": "CRLF"
+  },
+  "normalization": {
+    "script": "scripts/normalize_finance_ohlcv.py",
+    "symbol": "SPY",
+    "procedure": "Replace the raw header with the evaluator header using LF; insert constant SPY after each date; preserve every numeric field, row order, and each data row's original line ending."
+  },
+  "normalized_artifact": {
+    "path": "data/snapshots/D-0002/711fe4515b644cf2278d414cfb4af98488b06e9488e8a468c1ec470931d83f81.csv",
+    "sha256": "711fe4515b644cf2278d414cfb4af98488b06e9488e8a468c1ec470931d83f81",
+    "bytes": 35589
+  },
+  "limitations": [
+    "The provider exposes no publication timestamp, completed-bar flag, or revision identifier.",
+    "Repeated retrievals may revise values.",
+    "This provenance proves retrieval and deterministic normalization, not historical session-close availability."
+  ]
+}

@@ -44,7 +44,26 @@ its canonical path.
 
 - Artifact: `data/snapshots/index.jsonl`
 - Validation: 20 tests, registry validation, repository validation, and independent review passed
-- Next action: retrieve and register current SPY daily data as `D-0002`
+- Next action: completed as A-0006
+
+#### A-0006 data refresh blocker
+
+The approved structured finance tool returned 650 SPY daily OHLCV rows from
+2024-01-02 through the last included date, 2026-08-05. The evaluator-format
+normalization inserted the constant `SPY` symbol column and normalized the
+generated header line ending. Numeric fields and row order are unchanged.
+D-0002 is identical to D-0001 across all 502 overlapping sessions and adds 148
+later sessions.
+
+- Dataset: `D-0002`
+- Snapshot checksum: `711fe4515b644cf2278d414cfb4af98488b06e9488e8a468c1ec470931d83f81`
+- Registry status: validated
+- Point-in-time status: unverified for historical session-close decisions
+- Distributions: excluded
+- Outcome: block, because the provider exposes no availability, bar-completion,
+  or revision identifier and repeated retrievals can revise values
+- Next action: `A-0009`, establish approved point-in-time provenance or a
+  human-approved forward-only use boundary
 
 ## Rejected
 
