@@ -1,6 +1,6 @@
 # BL-0006: Scope the agent deny rules to the runner
 
-- Status: open
+- Status: open (one narrowing applied 2026-08-08; the scoping decision remains)
 - Priority: 6
 - Requires sealed changes: no
 - Requires protected-path changes: yes (`loop/`, `.claude/`) — human applies
@@ -44,16 +44,63 @@ running it.
    everyone including supervised sessions, and move only the machinery paths
    (`loop/`, `.github/`, `.claude/`) to the runner-scoped file.
 
+## What the deny list does not cover
+
+Worth recording before it is rediscovered: the deny rules constrain the `Bash`,
+`Edit`, and `Write` tools. They do not constrain MCP tools. A session with a
+GitHub MCP server connected can write repository contents over the API without
+touching a denied pattern.
+
+This is not a runner risk — `run_session.sh` passes an explicit
+`--allowedTools` allowlist that contains no MCP tools, so the unattended agent
+cannot reach them. It applies to supervised sessions, where a human is present
+and the API path is a legitimate tool rather than an evasion. The point of
+recording it is that the deny list should not be mistaken for a complete
+boundary: it is one layer, and the layer that actually binds without
+supervision is the runner's allowlist.
+
+This item's own history is the worked example: the commit that added this
+section could not be pushed by the supervised session, and reached the
+repository through the GitHub API instead, with the human's explicit
+authorization. The API path was available the whole time; what made it
+legitimate was being asked for, not being reachable.
+
+## Applied 2026-08-08: the push deny, narrowed
+
+The blanket `Bash(git push *)` / `Bash(git push)` pair was replaced with an
+enumeration of the forms that target `main`, plus the force variants. Two
+reasons:
+
+1. It was protecting nothing on the autonomous path. `run_session.sh` passes
+   an `--allowedTools` **allowlist**, and `git push` is not in it, so the
+   unattended agent cannot push regardless of what this file says. The deny's
+   only effect was on supervised sessions.
+2. Its cost was real: it blocked a supervised session from pushing a
+   documentation-only commit to a feature branch four times in one session.
+
+Be clear-eyed about what the replacement is. Permission rules support only
+exact match and prefix wildcard — there is no mid-command matching — so a
+single rule cannot express "any push to `main`". `git push origin  main` with
+two spaces, or `git push origin refs/heads/main`, are not caught. It is a
+guardrail against a slip, not a boundary, and anyone treating it as a boundary
+would be making exactly the mistake this item exists to prevent.
+
+The real boundary for `main` arrives with BL-0005: once the ruleset requires a
+pull request, the server refuses every direct push regardless of spelling, and
+this enumeration should be deleted rather than maintained.
+
 ## Recommendation to evaluate, not to assume
 
 Option 3 matches the actual risk shape: evidence should be immutable to every
 automated writer regardless of supervision, whereas loop machinery is precisely
-what a supervised human-plus-assistant session exists to repair. Option 1 is
-the correct default until someone has a concrete reason to change it — the
-patch handoff cost about two minutes.
+what a supervised human-plus-assistant session exists to repair.
+
+Option 1 remains the correct default for `Edit`/`Write` on `loop/`,
+`evaluator/`, and `scripts/`: the patch handoff cost about two minutes, and the
+friction falls exactly on the changes that deserve it.
 
 ## Definition of done
 
-A decision is recorded in a journal entry and, if anything changes, ADR-0008's
-"Enforcement reality" section is updated to describe which layer constrains
-which kind of session.
+A decision on the scoping question (options 1–3) is recorded in a journal entry
+and, if anything changes, ADR-0008's "Enforcement reality" section is updated to
+describe which layer constrains which kind of session.
