@@ -51,7 +51,10 @@ The loop is proved when all five have been demonstrated:
 
 1. Five consecutive scheduled sessions with no human input mid-run, each
    leaving a validated artifact and an updated handoff with
-   `loop/validate_session.sh` green. — progress: 0/5
+   `loop/validate_session.sh` green. — progress: 0/5. Do not start counting
+   until BL-0005 lands: until the loop is pull-request-based, a green
+   validator is the session vouching for itself, and `CODEOWNERS` enforces
+   nothing (ADR-0008, "Enforcement reality").
 2. One deliberately induced validation failure that salvages correctly:
    journal and handoff reach `main`, rejected work quarantined to a
    `failed/` branch. — not attempted

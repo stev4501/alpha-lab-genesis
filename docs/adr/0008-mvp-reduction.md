@@ -125,6 +125,44 @@ The reduction succeeds when all of the following have been demonstrated:
    evaluator validity-stamp change request, the human approves it, a sealed
    G-0004 lands, and the agent resumes under it.
 
+## Enforcement reality
+
+Added 2026-08-08 after an adversarial review of the branch-protection options.
+This section exists because the rest of this ADR could otherwise be read as
+claiming protection the repository does not have.
+
+**Binding on everyone, enforced server-side by GitHub:**
+
+- `main` cannot be force-pushed or deleted (ruleset `main history protection`,
+  rules `deletion` + `non_fast_forward`, no bypass actors).
+- Tags matching `pre-*` cannot be updated or deleted (ruleset
+  `freeze tag immutability`, rules `update` + `deletion` + `non_fast_forward`,
+  no bypass actors). This is what makes the sealed-hash check meaningful: the
+  check reads `CORE_MANIFEST.json` from `pre-mvp-freeze`, and a movable tag
+  would be a movable root of trust. Verified empirically by a rejected
+  fast-forward tag move, which the `update` rule refuses and which
+  `non_fast_forward` alone would have permitted.
+
+**Self-policed, enforced only by code the session itself runs:**
+
+- `loop/validate_session.sh`, invoked by `loop/run_session.sh` from `main`
+  rather than from the branch under test, so a session that tampers with the
+  validator does not get to judge itself.
+- The `.claude/settings.json` deny rules and the runner's `--allowedTools`
+  allowlist.
+
+**Not in effect: `CODEOWNERS`.** It binds only through a required pull-request
+review, which is deliberately disabled so the runner can push `main` directly.
+Until the loop is pull-request-based (BL-0005), `CODEOWNERS` is a statement of
+intent, not a control. Enabling "Require a pull request" before that change
+would not gate sessions; it would destroy their output, because the runner
+treats a rejected push as a warning.
+
+Branch protection therefore bounds the irreversible failure — history rewriting
+— while the reversible failure, a bad forward commit, is caught only by
+machinery the agent could in principle reach. That asymmetry is accepted for
+the MVP and closed by BL-0005.
+
 ## Consequences
 
 - The working tree now claims only what the loop can prove.
