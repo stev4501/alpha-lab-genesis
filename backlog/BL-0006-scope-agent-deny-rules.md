@@ -1,6 +1,6 @@
 # BL-0006: Scope the agent deny rules to the runner
 
-- Status: open
+- Status: open (one narrowing applied 2026-08-08; the scoping decision remains)
 - Priority: 6
 - Requires sealed changes: no
 - Requires protected-path changes: yes (`loop/`, `.claude/`) — human applies
@@ -65,21 +65,35 @@ repository through the GitHub API instead, with the human's explicit
 authorization. The API path was available the whole time; what made it
 legitimate was being asked for, not being reachable.
 
+## Applied 2026-08-08: the push deny, narrowed
+
+The blanket `Bash(git push *)` / `Bash(git push)` pair was replaced with an
+enumeration of the forms that target `main`, plus the force variants. Two
+reasons:
+
+1. It was protecting nothing on the autonomous path. `run_session.sh` passes
+   an `--allowedTools` **allowlist**, and `git push` is not in it, so the
+   unattended agent cannot push regardless of what this file says. The deny's
+   only effect was on supervised sessions.
+2. Its cost was real: it blocked a supervised session from pushing a
+   documentation-only commit to a feature branch four times in one session.
+
+Be clear-eyed about what the replacement is. Permission rules support only
+exact match and prefix wildcard — there is no mid-command matching — so a
+single rule cannot express "any push to `main`". `git push origin  main` with
+two spaces, or `git push origin refs/heads/main`, are not caught. It is a
+guardrail against a slip, not a boundary, and anyone treating it as a boundary
+would be making exactly the mistake this item exists to prevent.
+
+The real boundary for `main` arrives with BL-0005: once the ruleset requires a
+pull request, the server refuses every direct push regardless of spelling, and
+this enumeration should be deleted rather than maintained.
+
 ## Recommendation to evaluate, not to assume
 
 Option 3 matches the actual risk shape: evidence should be immutable to every
 automated writer regardless of supervision, whereas loop machinery is precisely
 what a supervised human-plus-assistant session exists to repair.
-
-One concrete narrowing is worth considering on its own, independent of which
-option is chosen. During the 2026-08-08 session the `Bash(git push *)` deny
-blocked a supervised session from pushing a documentation-only commit to a
-feature branch four times, which is friction with no corresponding protection:
-`main` is already defended server-side by the `main history protection`
-ruleset, which no client-side rule can strengthen. Narrowing the deny to
-`main` and the force variants would leave every protection intact — the runner
-still cannot push `main`, and the ruleset still refuses force-pushes from
-anyone — while letting a supervised session finish its own work.
 
 Option 1 remains the correct default for `Edit`/`Write` on `loop/`,
 `evaluator/`, and `scripts/`: the patch handoff cost about two minutes, and the
@@ -87,6 +101,6 @@ friction falls exactly on the changes that deserve it.
 
 ## Definition of done
 
-A decision is recorded in a journal entry and, if anything changes, ADR-0008's
-"Enforcement reality" section is updated to describe which layer constrains
-which kind of session.
+A decision on the scoping question (options 1–3) is recorded in a journal entry
+and, if anything changes, ADR-0008's "Enforcement reality" section is updated to
+describe which layer constrains which kind of session.
