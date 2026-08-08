@@ -45,6 +45,20 @@ ADR-0007 approval-boundary requirements:
 5. Tests that fail under the current behavior (a run whose stamps say
    "passed" with no check log must fail under G-0004).
 6. Rollback and historical-artifact preservation behavior.
+6a. The successor freeze tag. `loop/validate_session.sh` verifies sealed
+   hashes against `CORE_MANIFEST.json` as it exists at `REFERENCE_TAG`
+   (a variable at the top of that script), currently `pre-mvp-freeze`. A
+   G-0004 that changes sealed hashes therefore needs a new reference tag and
+   a one-line change to that variable. Do **not** move `pre-mvp-freeze` — it
+   is immutable by ruleset and is the historical record.
+
+   Constraint the request must state explicitly: the tag ruleset
+   `freeze tag immutability` matches `refs/tags/pre-*`. A successor named
+   outside that pattern (`g0004-freeze`, say) would be created successfully
+   and protected by nothing, with no error at any point. Name it
+   `pre-g0004-freeze` or equivalent, or add a second include pattern to the
+   ruleset first — and verify with a rejected force-update before relying on
+   it, the same way `pre-mvp-freeze` was verified.
 7. The explicit human approval point: what the human must approve, and that
    the agent stops there.
 
