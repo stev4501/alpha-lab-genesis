@@ -114,6 +114,26 @@ Applying the `validate_session.sh` half alone would let a session burn 90
 minutes and then fail the gate for a change it was never warned off. Apply both
 halves or neither.
 
+## Interaction with the pending PR-mode patches
+
+`core_change_requests/2026-08-08-pr-mode-loop.md` (merged to main in #4) also
+carries an unapplied patch against `loop/run_session.sh`. Both are pending at
+the same time, so the composition was tested rather than assumed.
+
+They touch disjoint regions. The PR-mode runner patch has hunks at original
+lines 2, 16, 32, 98, and 130; Part A's are at 68 and 77, in the `claude -p`
+invocation the PR-mode patch does not modify. Verified in both orders against
+`main` at `016d4f9`:
+
+| Order | Result |
+| :--- | :--- |
+| PR-mode, then Part A | applies, hunks offset +25 |
+| Part A, then PR-mode | applies, hunks offset +12 |
+
+In both cases the composed script parses under `bash -n` and carries exactly one
+`--disallowedTools "Skill"`, positioned directly after `--allowedTools`. No
+ordering constraint; apply them in either order.
+
 ## How to apply
 
 ```bash
@@ -125,6 +145,9 @@ bash -n loop/run_session.sh && bash -n loop/validate_session.sh
 python scripts/validate_repository.py
 python -m unittest discover -s tests
 ```
+
+`git apply` reports "Hunk N succeeded at M (offset X lines)" when the PR-mode
+patch has already landed. That is expected, not a warning to act on.
 
 ## What is blocked until this is applied
 
