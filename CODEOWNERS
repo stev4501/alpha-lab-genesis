@@ -1,0 +1,14 @@
+# Protected paths require review by the human operator.
+# Branch protection on main (required reviews + required status checks)
+# must be enabled in GitHub settings for these rules to bind.
+
+/evaluator/          @stev4501
+/scripts/            @stev4501
+/schemas/            @stev4501
+/loop/               @stev4501
+/.github/            @stev4501
+/.claude/            @stev4501
+/CORE_MANIFEST.json  @stev4501
+/MISSION.md          @stev4501
+/CONTEXT.md          @stev4501
+/CODEOWNERS          @stev4501
