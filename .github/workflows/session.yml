@@ -1,0 +1,56 @@
+name: research-session
+
+# Manual trigger only for now. The schedule below is intentionally absent:
+# per ADR-0008, a human enables it only after the first workflow_dispatch
+# runs prove the loop end to end.
+on:
+  workflow_dispatch: {}
+
+concurrency:
+  group: research-session      # never two sessions at once
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  session:
+    runs-on: ubuntu-latest
+    timeout-minutes: 110       # runner-level backstop above SESSION_MINUTES
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          # fetch-depth: 0 is required: validate_session.sh diffs against
+          # main and verifies sealed hashes against the pre-mvp-freeze tag.
+          # Default GITHUB_TOKEN can push, but pushes won't trigger other
+          # workflows. Fine here; switch to a PAT/App token if that changes.
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install deps
+        run: |
+          pip install pytest jsonschema
+          npm install -g @anthropic-ai/claude-code
+
+      - name: Configure git identity
+        run: |
+          git config user.name  "alpha-lab-agent"
+          git config user.email "agent@users.noreply.github.com"
+
+      - name: Run session
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          SESSION_MINUTES: "90"
+          MAX_BUDGET_USD: "5"
+        run: bash loop/run_session.sh
+
+      - name: Upload session logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: session-logs-${{ github.run_id }}
+          path: logs/loop/
+          retention-days: 30
