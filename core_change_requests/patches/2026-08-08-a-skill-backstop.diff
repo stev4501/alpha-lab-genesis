@@ -1,0 +1,30 @@
+diff --git a/loop/run_session.sh b/loop/run_session.sh
+index ea33fd0..b75289c 100755
+--- a/loop/run_session.sh
++++ b/loop/run_session.sh
+@@ -68,6 +68,17 @@ PROMPT="$(sed -e "s/{{SESSION_ID}}/${SESSION_ID}/g" \
+ # do NOT fire in -p mode; .claude/settings.json deny rules and this allowlist
+ # are the only permission layers before validation.
+ #
++# Note what --allowedTools is: an auto-approve list, not a restricting allowlist.
++# Omitted tools stay available and fall back to prompting, which on this
++# unattended path means denied. That covers permission-gated tools -- Bash, Edit,
++# Write -- which is why the reasoning in BL-0006 holds for git push. It does NOT
++# cover the Skill tool: Claude invokes skills without a permission prompt, so an
++# omitted Skill is still reachable. Skill is therefore removed explicitly below;
++# a bare tool name in --disallowedTools drops the tool from the agent's context
++# entirely. This costs the session agent nothing, because this repo's core skills
++# live at skills/<name>/SKILL.md -- not a Claude Code discovery path -- and are
++# read with Read, not invoked through the Skill tool. See docs/dev-only-skills.md.
++#
+ # Deliberately NOT allowlisted: "cat" and "ls". Bash patterns match the command
+ # string, so "cat x > loop/validate_session.sh" satisfies "Bash(cat *)" while
+ # writing to a path the Edit/Write deny rules protect. Read, Glob, and Grep
+@@ -77,6 +88,7 @@ set +e
+ timeout --signal=TERM "${SESSION_MINUTES}m" \
+   "$CLAUDE_BIN" -p "$PROMPT" \
+     --allowedTools "Read,Glob,Grep,Edit,Write,Bash(git status),Bash(git status *),Bash(git add *),Bash(git commit *),Bash(git log *),Bash(git diff *),Bash(git show *),Bash(python scripts/validate_repository.py *),Bash(python scripts/validate_repository.py),Bash(python scripts/preregister_experiment.py *),Bash(python scripts/finalize_experiment.py *),Bash(python scripts/record_evidence_review.py *),Bash(python scripts/register_market_snapshot.py *),Bash(python scripts/normalize_finance_ohlcv.py *),Bash(python evaluator/daily_bar.py *),Bash(python -m pytest *),Bash(mkdir -p *)" \
++    --disallowedTools "Skill" \
+     --max-turns "$MAX_TURNS" \
+     --max-budget-usd "$MAX_BUDGET_USD" \
+     --output-format json \
