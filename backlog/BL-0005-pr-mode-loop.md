@@ -1,6 +1,7 @@
 # BL-0005: Make the loop pull-request-based so CODEOWNERS binds
 
-- Status: open
+- Status: open — steps 1 and 2 drafted as patches 2026-08-08, awaiting a human
+  to apply them; step 3 unchanged and still last
 - Priority: 5 (do before claiming exit criterion 1)
 - Requires sealed changes: no
 - Requires protected-path changes: yes (`loop/`, `.github/`) — human applies
@@ -45,6 +46,29 @@ Step 3 must land **after** steps 1 and 2, and after the runner fix that pushes
 before deleting the session branch. Enabling the pull-request requirement
 against the current runner does not gate sessions — it destroys them, because
 the rejected push is swallowed as a warning after the branch is already gone.
+
+## Drafted 2026-08-08: patches for steps 1 and 2
+
+`core_change_requests/2026-08-08-pr-mode-loop.md` carries both patches, verified
+with `git apply --check`. Five things this item does not say came out of writing
+them; two would have deadlocked the loop, and the change request states them in
+full. In short:
+
+1. The default `GITHUB_TOKEN` cannot trigger the required check — GitHub does not
+   run workflows on events it creates. Step 4 of this item is right that the
+   author must not be the human, but the token has to be a GitHub App or
+   machine-account one for both halves to hold.
+2. `session.yml` grants only `contents: write`; opening a pull request also needs
+   `pull-requests: write`.
+3. The `GITHUB_TOKEN` fallback additionally needs "Allow GitHub Actions to create
+   and approve pull requests" enabled in repository settings.
+4. The salvage path pushes `main` directly, which step 3 would refuse — stranding
+   the journal of every failed session off `main` and making exit criterion 2
+   unreachable. The salvage has to travel a pull request too.
+5. The required check cannot run the full validator on a salvage branch (it
+   failed validation by construction, so the check would always be red), and must
+   pass ordinary human pull requests, or it blocks the very changes that repair
+   the loop.
 
 ## Definition of done
 

@@ -1,0 +1,126 @@
+diff --git a/.github/workflows/session-validate.yml b/.github/workflows/session-validate.yml
+new file mode 100644
+index 0000000..8a38379
+--- /dev/null
++++ b/.github/workflows/session-validate.yml
+@@ -0,0 +1,120 @@
++name: session-validate
++
++# The gate that binds. loop/run_session.sh runs the same validator locally, but
++# that is the session vouching for itself; this job is the copy no session can
++# reach, because it reads loop/validate_session.sh from the pull request's BASE
++# ref rather than from its head.
++#
++# The job name below — validate-session — is the context to name in the
++# `main history protection` ruleset's required status checks.
++
++on:
++  pull_request:
++    branches: [main]
++
++permissions:
++  contents: read
++
++concurrency:
++  group: session-validate-${{ github.event.pull_request.number }}
++  cancel-in-progress: true
++
++jobs:
++  validate-session:
++    name: validate-session
++    runs-on: ubuntu-latest
++    timeout-minutes: 20
++    steps:
++      - name: Classify the pull request
++        id: classify
++        env:
++          HEAD_REF: ${{ github.event.pull_request.head.ref }}
++        run: |
++          # session/* -> the full validator.
++          # salvage/* -> narrative-only check; see the step below for why it is
++          #              not the full validator.
++          # anything else -> this gate does not apply; human pull requests are
++          #              governed by review, not by the session contract.
++          case "$HEAD_REF" in
++            session/*) KIND=session ;;
++            salvage/*) KIND=salvage ;;
++            *)         KIND=other   ;;
++          esac
++          echo "kind=$KIND"                     >> "$GITHUB_OUTPUT"
++          echo "session_id=${HEAD_REF##*/}"     >> "$GITHUB_OUTPUT"
++          echo "Head ref $HEAD_REF classified as $KIND."
++
++      - name: Checkout the pull request head
++        if: steps.classify.outputs.kind != 'other'
++        uses: actions/checkout@v4
++        with:
++          # The working tree must be the head: checks 6 and 7 of the validator
++          # run validate_repository.py and pytest against the checked-out tree,
++          # and it is the head that is on trial. Only the validator itself comes
++          # from the base ref.
++          ref: ${{ github.event.pull_request.head.sha }}
++          fetch-depth: 0
++
++      - name: Fetch the base ref and the reference tag
++        if: steps.classify.outputs.kind != 'other'
++        env:
++          BASE_SHA: ${{ github.event.pull_request.base.sha }}
++        run: |
++          # validate_session.sh resolves the base ref and REFERENCE_TAG
++          # (pre-mvp-freeze) or it fails closed, so make both present explicitly
++          # rather than relying on what fetch-depth: 0 happened to bring along.
++          git fetch --force --tags origin
++          git rev-parse --verify -q "${BASE_SHA}^{commit}" >/dev/null \
++            || git fetch --no-tags origin "${BASE_SHA}"
++
++      - uses: actions/setup-python@v5
++        if: steps.classify.outputs.kind != 'other'
++        with:
++          python-version: "3.11"
++
++      - name: Install deps
++        if: steps.classify.outputs.kind != 'other'
++        run: pip install pytest jsonschema
++
++      - name: Validate the session branch
++        if: steps.classify.outputs.kind == 'session'
++        env:
++          BASE_SHA: ${{ github.event.pull_request.base.sha }}
++          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
++          SESSION_ID: ${{ steps.classify.outputs.session_id }}
++        run: |
++          # Read the validator from the BASE ref, never from the head. Check 1
++          # of the validator already rejects any diff touching loop/, but that
++          # check lives in the very file a tampering session would replace, so
++          # it cannot be the thing that protects itself.
++          git show "${BASE_SHA}:loop/validate_session.sh" > "${RUNNER_TEMP}/validate_session.sh"
++          chmod +x "${RUNNER_TEMP}/validate_session.sh"
++          "${RUNNER_TEMP}/validate_session.sh" "$BASE_SHA" "$HEAD_SHA" "$SESSION_ID"
++
++      - name: Check the salvage branch carries only narrative artifacts
++        if: steps.classify.outputs.kind == 'salvage'
++        env:
++          BASE_SHA: ${{ github.event.pull_request.base.sha }}
++          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
++        run: |
++          # A salvage branch exists BECAUSE its session failed validation, so
++          # running the full validator here would guarantee a red check and
++          # strand the journal off main permanently — the opposite of ADR-0008
++          # exit criterion 2, which requires the journal and handoff to reach
++          # main while the rejected work stays quarantined. What must hold for a
++          # salvage is narrower: that it carries nothing but its narrative.
++          CHANGED="$(git diff --name-only "$BASE_SHA".."$HEAD_SHA")"
++          echo "Files changed:"; printf '%s\n' "$CHANGED" | sed 's/^/  /'
++          OFFENDING="$(printf '%s\n' "$CHANGED" | grep -vE '^(journals/|HANDOFF\.md$)' || true)"
++          if [[ -n "$OFFENDING" ]]; then
++            echo "FAIL: salvage carries more than journals/ and HANDOFF.md:"
++            printf '%s\n' "$OFFENDING" | sed 's/^/  /'
++            exit 1
++          fi
++          echo "PASS: salvage carries only journals/ and HANDOFF.md"
++
++      - name: Not a session pull request
++        if: steps.classify.outputs.kind == 'other'
++        run: |
++          echo "Head ref is not session/* or salvage/*."
++          echo "This gate gates autonomous sessions; this pull request is governed by review."
