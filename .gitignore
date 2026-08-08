@@ -1,3 +1,12 @@
 __pycache__/
 *.py[cod]
 .DS_Store
+
+# Runner transcripts written by loop/run_session.sh (runner.log, selfcheck.log,
+# validate.log, agent_result.json). The runner's `git add -A` would otherwise
+# commit each session's own logs — including the full agent result JSON — into
+# that session's commit on main. They are still captured: session.yml uploads
+# logs/loop/ as a workflow artifact, and the salvage path already copies the
+# first failing check into HANDOFF.md. Scoped to loop/ so the per-run
+# experiment logs described in logs/README.md stay tracked.
+logs/loop/
