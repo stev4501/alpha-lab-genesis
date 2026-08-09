@@ -77,7 +77,7 @@ All six paths below are sealed under `CORE_MANIFEST.json` component `EV-0002`
 | 4 | `CORE_MANIFEST.json` | protected | New `sha256` for every changed path; `system_generation` → `G-0004` | **yes, mechanical** |
 | 5 | `schemas/experiment.schema.json` | yes + protected | none | **no, argued — §1.3** |
 | 6 | `scripts/preregister_experiment.py` | yes | Compose the interpreter version into `design.environment_id` | **yes, argued — §8** |
-| 7 | `scripts/record_evidence_review.py` | yes | none identified | no |
+| 7 | `scripts/record_evidence_review.py` | yes | Second copy of `PROMOTION_CHECKS`, same accept-set change; `validity_failures` semantics | **yes, required — §1.4** |
 
 Unsealed but required in the same landing (agent may edit; listed so the change
 is not mistaken for complete without them):
@@ -133,6 +133,34 @@ The schema comes back into scope if, and only if, the human prefers the check
 record to live *inside* `validity.json` rather than in a separate
 `checks.json`. §2.2 recommends the separate artifact precisely to keep the
 sealed schema out of this generation.
+
+### 1.4 `scripts/record_evidence_review.py` — the second gate, and the second copy
+
+`PROMOTION_CHECKS` exists **twice**, independently, with the same five names and
+the same `!= "passed"` predicate: `scripts/finalize_experiment.py` lines 13–19
+and `scripts/record_evidence_review.py` lines 11–16. The review script refuses a
+`promote` decision on the same test (lines 42–46), so the promotion path is
+gated twice and G-0004 must change both. Changing only finalization would leave
+an honest `not_applicable` blocked at review instead of at finalization — the
+same deadlock, one step earlier, and harder to diagnose because this request
+would by then be claiming to have fixed it.
+
+Two consequences worth stating rather than discovering:
+
+- **The duplication should not be refactored in this change.** Consolidating the
+  constant into a shared module would be cleaner and would touch a third sealed
+  path (or create a new one) for no integrity gain. Change both copies
+  identically, and add a test asserting the two lists are equal, so the next
+  divergence is caught rather than inherited.
+- **`validity_failures` changes meaning.** `record_evidence_review.py` line 63
+  writes the computed `failed` list into `review.json` under that name. Today it
+  is always empty, because every stamp is forged to `"passed"`. Under honest
+  stamps it becomes non-empty for every experiment, listing `not_applicable`
+  checks as "failures" — which they are not. Either the field is computed
+  against the same accept-set as the gate (recommended: it then means "checks
+  blocking promotion", which is what a reviewer actually needs), or it is
+  renamed. It should not be left computing one thing while its name says
+  another.
 
 ---
 
@@ -199,8 +227,10 @@ which §4 forbids.
 ### 2.4 Finalization: the gate accepts earned passes and honest exemptions
 
 **Invariant I-4.** `PROMOTION_CHECKS` is evaluated against the accept-set
-`{"passed", "not_applicable"}`. `"not_run"`, `"failed"`, and `"warning"` all
-block promotion, and the error message names which check and which status.
+`{"passed", "not_applicable"}` — **in both places it is defined**
+(`scripts/finalize_experiment.py` and `scripts/record_evidence_review.py`, see
+§1.4). `"not_run"`, `"failed"`, and `"warning"` all block promotion, and the
+error message names which check and which status.
 
 The consequence must be stated plainly rather than engineered around: with
 `leakage_check` and `corporate_action_check` honestly at `"not_run"` (§3),
@@ -375,6 +405,7 @@ these must be written to fail against G-0003 and pass under G-0004.
 | T-7 | Promotion with `survivorship_check == "not_applicable"` and all else earned → **allowed** | blocked today: `"not_applicable" != "passed"` |
 | T-8 | Promotion with any `"not_run"` → refused, error names the check | passes today only because nothing is ever `"not_run"` |
 | T-9 | Pre-G-0004 records in `EXPERIMENTS.jsonl` still validate | guards §4.1 — must pass before *and* after |
+| T-10 | `record_evidence_review.py` accepts a `promote` review with `not_applicable`, refuses one with `not_run`, and its `PROMOTION_CHECKS` equals `finalize_experiment.py`'s | the second gate is a separate copy (§1.4); today both are vacuous |
 
 T-9 is the regression that matters most: it is the one that catches an I-3
 implementation that forgot the generation predicate and retroactively
@@ -448,7 +479,11 @@ The agent stops here. What the human is being asked to approve:
 2. **The scope calls**, each of which the human may overturn without
    invalidating the rest: `finalize_experiment.py` **in** (§1.1),
    `CORE_SKILLS` un-hardcoding **in** as a separable part B (§1.2), the schema
-   **out** (§1.3), interpreter version **recorded but not enforced** (§8).
+   **out** (§1.3), `record_evidence_review.py` **in** and its duplicated
+   `PROMOTION_CHECKS` left duplicated rather than refactored (§1.4), interpreter
+   version **recorded but not enforced** (§8). Six of the seven paths in §1's
+   first table are in scope; `schemas/experiment.schema.json` is the only
+   exclusion.
 3. **The five verdicts** in the §3.6 table — specifically that
    `survivorship_check` returns `not_applicable` rather than `not_run`, which is
    the one verdict in the table that is a judgment call rather than a fact.

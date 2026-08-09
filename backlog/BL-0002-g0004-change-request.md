@@ -93,7 +93,7 @@ points plus 6a and the BL-0001 input are covered; `scripts/validate_repository.p
 reports valid and `git status` shows no sealed, protected, or evidence path
 touched.
 
-Four things the drafting found that this item did not anticipate, recorded here
+Five things the drafting found that this item did not anticipate, recorded here
 so they are not rediscovered:
 
 1. **`scripts/finalize_experiment.py` had to be added to scope.** Its
@@ -112,7 +112,14 @@ so they are not rediscovered:
    `warning`, and the validator's `VALIDITY_FIELDS` is a key-presence check, not
    a value check. The schema returns to scope only if the human wants the check
    record inside `validity.json` instead of a separate `checks.json`.
-4. **`tests/test_golden_replay_e0002.py` breaks under G-0004 by construction**,
+4. **`PROMOTION_CHECKS` exists twice.** `scripts/record_evidence_review.py`
+   lines 11–16 carry an independent copy of the same five names and the same
+   `!= "passed"` predicate, and refuse a `promote` review on it (lines 42–46).
+   The promotion path is gated twice; both sealed copies must change together.
+   Its `validity_failures` field (line 63) also changes meaning under honest
+   stamps. Found while verifying a "no change needed" claim the request had
+   already made about that file.
+5. **`tests/test_golden_replay_e0002.py` breaks under G-0004 by construction**,
    at two named assertions (lines 188 and 221). BL-0001's own deliverable is a
    migration cost of this item's deliverable. The request specifies the rewrite
    — replay against the G-0002 evaluator bytes read from git rather than the
