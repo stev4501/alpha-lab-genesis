@@ -1,6 +1,9 @@
 # BL-0002: Draft the G-0004 core-change request (validity stamps)
 
-- Status: open
+- Status: **DONE (agent side) 2026-08-09** — see "Outcome 2026-08-09" below.
+  The deliverable exists at
+  `core_change_requests/CCR-0001-g0004-validity-stamps.md` and awaits human
+  approval, which is exit criterion 5 and outside this item.
 - Priority: 2
 - Requires sealed changes: NO — this item drafts the request only
 - Origin: ADR-0008 proof backlog (2026-08-08)
@@ -82,3 +85,42 @@ The request document exists, is complete per the list above, is referenced
 from the journal and HANDOFF.md, and nothing sealed was touched. A human
 approving it (and the subsequent sealed G-0004 landing) is exit criterion 5
 and happens outside this item.
+
+## Outcome 2026-08-09 (session `2026-08-09-0800`)
+
+`core_change_requests/CCR-0001-g0004-validity-stamps.md` is filed. All seven
+points plus 6a and the BL-0001 input are covered; `scripts/validate_repository.py`
+reports valid and `git status` shows no sealed, protected, or evidence path
+touched.
+
+Four things the drafting found that this item did not anticipate, recorded here
+so they are not rediscovered:
+
+1. **`scripts/finalize_experiment.py` had to be added to scope.** Its
+   `PROMOTION_CHECKS` (lines 13–19) already refuses promotion unless all five
+   stamps equal `"passed"` (lines 116–120). The gate is not missing — the
+   evaluator is forging its input. Fixing only the evaluator would turn a fake
+   pass into a permanent deadlock, because an honest `"not_applicable"` (which
+   survivorship on a one-symbol universe must return) is not `"passed"`.
+2. **The minimum honest fix is a deletion.** The preregistered validity values
+   are all `"not_run"` (`scripts/preregister_experiment.py` lines 149–153) and
+   the evaluator builds `{**prereg["validity"], <five overrides>}`. Removing the
+   five override lines alone yields honest stamps. Everything beyond that exists
+   to let a check that *does* run say so credibly.
+3. **`schemas/experiment.schema.json` needs no change** and was argued out of
+   scope: `$defs.check` already admits `not_run`/`not_applicable`/`failed`/
+   `warning`, and the validator's `VALIDITY_FIELDS` is a key-presence check, not
+   a value check. The schema returns to scope only if the human wants the check
+   record inside `validity.json` instead of a separate `checks.json`.
+4. **`tests/test_golden_replay_e0002.py` breaks under G-0004 by construction**,
+   at two named assertions (lines 188 and 221). BL-0001's own deliverable is a
+   migration cost of this item's deliverable. The request specifies the rewrite
+   — replay against the G-0002 evaluator bytes read from git rather than the
+   on-disk file — as part of the same landing.
+
+The interpreter-version question routed here by BL-0001 is **decided in the
+request, section 8**: record it in `design.environment_id`, do not enforce it,
+include the recording in G-0004's scope because
+`scripts/preregister_experiment.py` is sealed under the same component. The
+counter-argument (require an enforced environment digest instead) is stated
+fairly and left for the human to take up.
