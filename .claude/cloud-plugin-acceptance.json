@@ -1,0 +1,12 @@
+{
+  "status": "pending",
+  "pluginId": "mattpocock-skills@alpha-lab-pinned",
+  "gitCommitSha": "84fdeffd12f2ee307994d1eb6feb48173b6e0502",
+  "claudeVersion": "2.1.226",
+  "cloudEnvironment": "",
+  "sessionUrl": "",
+  "verifiedAt": "",
+  "directSkillInvocation": false,
+  "subagentSkillInvocation": false,
+  "notes": "Start a fresh cloud session on this branch, complete docs/dev-only-skills.md acceptance, then record the evidence here."
+}

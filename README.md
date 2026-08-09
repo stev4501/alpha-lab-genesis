@@ -52,11 +52,13 @@ alpha-lab-genesis/
 ```
 
 Third-party skills under `dev/plugins/` are for development, not for the
-autonomous loop. `bin/dev-session` loads them in a local terminal; they are not
-available in cloud or web sessions, and `docs/dev-only-skills.md` records why
-and what was tried. The loop's runner strips skills outright
-(`--disable-slash-commands`, `--disallowedTools "Skill"`), which is what would
-keep them unusable there if a delivery route is ever found.
+autonomous loop. `bin/dev-session` loads them in a local terminal; cloud
+sessions are configured to receive the same reviewed SHA through the pinned
+inline marketplace in `.claude/settings.json`. Merge is blocked until
+`.claude/cloud-plugin-acceptance.json` records a successful fresh-cloud and
+subagent check. The autonomous runner disables that exact plugin in
+`loop/agent-settings.json` and strips skills outright
+(`--disable-slash-commands`, `--disallowedTools "Skill"`).
 
 ## Source-of-Truth Rules
 

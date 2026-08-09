@@ -30,5 +30,27 @@
       "Bash(git rm *)",
       "Bash(git tag *)"
     ]
+  },
+  "extraKnownMarketplaces": {
+    "alpha-lab-pinned": {
+      "source": {
+        "source": "settings",
+        "name": "alpha-lab-pinned",
+        "plugins": [
+          {
+            "name": "mattpocock-skills",
+            "source": {
+              "source": "url",
+              "url": "https://github.com/mattpocock/skills.git",
+              "sha": "84fdeffd12f2ee307994d1eb6feb48173b6e0502"
+            }
+          }
+        ]
+      },
+      "autoUpdate": false
+    }
+  },
+  "enabledPlugins": {
+    "mattpocock-skills@alpha-lab-pinned": true
   }
 }

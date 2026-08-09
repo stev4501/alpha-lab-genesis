@@ -5,6 +5,7 @@ test is that they stay invisible to the autonomous sessions launched by
 loop/run_session.sh. See docs/dev-only-skills.md.
 """
 
+import hashlib
 import json
 import unittest
 from pathlib import Path
@@ -13,6 +14,15 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 DEV_PLUGINS = ROOT / "dev" / "plugins"
 CLAUDE_DIR = ROOT / ".claude"
+AGENT_SETTINGS = ROOT / "loop" / "agent-settings.json"
+CLOUD_ACCEPTANCE = CLAUDE_DIR / "cloud-plugin-acceptance.json"
+MARKETPLACE_NAME = "alpha-lab-pinned"
+PLUGIN_NAME = "mattpocock-skills"
+PLUGIN_ID = f"{PLUGIN_NAME}@{MARKETPLACE_NAME}"
+UPSTREAM_URL = "https://github.com/mattpocock/skills.git"
+UPSTREAM_SHA = "84fdeffd12f2ee307994d1eb6feb48173b6e0502"
+VENDORED_TREE_SHA256 = "9776f7fd3385785b812aa84fec16f49e975d9c5bf97e79c0347d2e66e0dc903f"
+VERIFIED_CLAUDE_VERSION = "2.1.226"
 
 
 def runner_code():
@@ -78,6 +88,28 @@ class TestVendoredPluginStructure(unittest.TestCase):
                 self.assertIn("https://github.com/", text, "VENDOR.md records no upstream URL")
                 self.assertIn("Commit", text, "VENDOR.md records no upstream commit")
 
+    def test_vendored_tree_matches_the_reviewed_snapshot(self):
+        """Every upstream-copied byte is covered by one deterministic digest."""
+        plugin = DEV_PLUGINS / PLUGIN_NAME
+        manifest = json.loads(
+            (plugin / ".claude-plugin" / "plugin.json").read_text(encoding="utf-8")
+        )
+        files = [plugin / ".claude-plugin" / "plugin.json", plugin / "LICENSE"]
+        for rel in manifest["skills"]:
+            files.extend(sorted((plugin / rel.lstrip("./")).rglob("*")))
+
+        digest = hashlib.sha256()
+        for path in sorted({p for p in files if p.is_file()}):
+            digest.update(str(path.relative_to(plugin)).encode("utf-8"))
+            digest.update(b"\0")
+            digest.update(path.read_bytes())
+
+        self.assertEqual(digest.hexdigest(), VENDORED_TREE_SHA256)
+        self.assertIn(
+            UPSTREAM_SHA,
+            (plugin / "VENDOR.md").read_text(encoding="utf-8"),
+        )
+
 
 class TestDevPluginsStayOutOfAutonomousSessions(unittest.TestCase):
     """The invariant that makes these skills developer-only."""
@@ -100,43 +132,96 @@ class TestDevPluginsStayOutOfAutonomousSessions(unittest.TestCase):
             ".claude/skills/ exists: skills placed there load into autonomous sessions too",
         )
 
-    def test_declaring_plugins_requires_the_runner_controls(self):
-        """If project settings ever declare a plugin, the runner must strip skills.
+    def test_cloud_plugin_is_declared_from_a_pinned_inline_marketplace(self):
+        """Cloud delivery must resolve the reviewed upstream commit without local state."""
+        settings = json.loads((CLAUDE_DIR / "settings.json").read_text(encoding="utf-8"))
+        self.assertIs(settings.get("enabledPlugins", {}).get(PLUGIN_ID), True)
 
-        Conditional on purpose. An earlier revision asserted a specific
-        `enabledPlugins` entry unconditionally, because that declaration was
-        believed to be how cloud sessions received these skills. A probe on a
-        fresh cloud session disproved it (see docs/dev-only-skills.md), so the
-        declaration was removed — and a test demanding a key that does nothing
-        would fail the suite for anyone who sensibly deleted it.
+        marketplace = settings.get("extraKnownMarketplaces", {}).get(MARKETPLACE_NAME)
+        self.assertIsNotNone(marketplace, f"{MARKETPLACE_NAME} marketplace is not declared")
+        self.assertIs(marketplace.get("autoUpdate"), False)
 
-        The invariant that survives is the safety one: a declared plugin loads
-        into any session reading project settings, so declaring one is only safe
-        while the runner removes skills. Nothing declared, nothing to check.
-        """
-        settings_path = CLAUDE_DIR / "settings.json"
-        if not settings_path.is_file():
-            self.skipTest("no .claude/settings.json")
-        declared = json.loads(settings_path.read_text(encoding="utf-8")).get("enabledPlugins") or {}
-        if not declared:
-            return  # nothing declared: the invariant is vacuously satisfied
+        source = marketplace.get("source", {})
+        self.assertEqual(source.get("source"), "settings")
+        self.assertEqual(source.get("name"), MARKETPLACE_NAME)
+        plugins = source.get("plugins")
+        self.assertEqual(len(plugins or []), 1)
+        self.assertEqual(plugins[0].get("name"), PLUGIN_NAME)
+        self.assertEqual(
+            plugins[0].get("source"),
+            {
+                "source": "url",
+                "url": UPSTREAM_URL,
+                "sha": UPSTREAM_SHA,
+            },
+        )
+
+    def test_declared_cloud_plugin_requires_the_runner_controls(self):
+        """The runner must remove the Skill surface whenever cloud delivery is enabled."""
         runner = runner_code()
         self.assertIn(
             "--disable-slash-commands", runner,
-            f"project settings declare plugins {list(declared)} but the runner does not disable skills",
+            f"project settings declare {PLUGIN_ID} but the runner does not disable skills",
         )
         self.assertRegex(
             runner, r'--disallowedTools\s+"Skill"',
-            f"project settings declare plugins {list(declared)} but the runner does not remove the Skill tool",
+            f"project settings declare {PLUGIN_ID} but the runner does not remove the Skill tool",
         )
 
+    def test_autonomous_settings_disable_the_cloud_plugin(self):
+        """The runner's explicit settings file must override project enablement."""
+        settings = json.loads(AGENT_SETTINGS.read_text(encoding="utf-8"))
+        self.assertIs(
+            settings.get("enabledPlugins", {}).get(PLUGIN_ID),
+            False,
+            f"{PLUGIN_ID} is not explicitly disabled for autonomous sessions",
+        )
+
+    def test_runner_supplies_no_plugin_delivery_flags(self):
+        """The autonomous path may disable plugins, but must never sideload one."""
+        runner = runner_code()
+        for flag in ("--plugin-dir", "--plugin-url"):
+            self.assertNotIn(flag, runner, f"autonomous runner supplies {flag}")
+
+    def test_autonomous_workflow_pins_the_verified_claude_version(self):
+        workflow = (ROOT / ".github" / "workflows" / "session.yml").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn(
+            f"@anthropic-ai/claude-code@{VERIFIED_CLAUDE_VERSION}",
+            workflow,
+        )
+
+    def test_fresh_cloud_delivery_is_accepted_before_merge(self):
+        """Protected receipt stays red until the real cloud and subagent seam passes."""
+        acceptance = json.loads(CLOUD_ACCEPTANCE.read_text(encoding="utf-8"))
+        self.assertEqual(acceptance.get("status"), "verified")
+        self.assertEqual(acceptance.get("pluginId"), PLUGIN_ID)
+        self.assertEqual(acceptance.get("gitCommitSha"), UPSTREAM_SHA)
+        self.assertEqual(acceptance.get("claudeVersion"), VERIFIED_CLAUDE_VERSION)
+        self.assertIs(acceptance.get("directSkillInvocation"), True)
+        self.assertIs(acceptance.get("subagentSkillInvocation"), True)
+        self.assertTrue(acceptance.get("cloudEnvironment"))
+        self.assertTrue(acceptance.get("sessionUrl"))
+        self.assertTrue(acceptance.get("verifiedAt"))
 
 class TestVendoredPluginsGrantNoTools(unittest.TestCase):
     """A plugin can ship more than skill text. Vendored ones here do not."""
 
-    def test_no_hooks_or_mcp_servers(self):
+    def test_no_plugin_root_components_beyond_skills(self):
+        """Claude plugin components must not appear at their root discovery paths."""
         for plugin in plugin_dirs():
-            for name in ("hooks", ".mcp.json", "mcp.json"):
+            for name in (
+                "agents",
+                "commands",
+                "hooks",
+                "monitors",
+                "output-styles",
+                ".mcp.json",
+                "mcp.json",
+                ".lsp.json",
+                "settings.json",
+            ):
                 with self.subTest(plugin=plugin.name, component=name):
                     self.assertFalse(
                         (plugin / name).exists(),

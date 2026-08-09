@@ -23,12 +23,13 @@ denies `Read(dev/plugins/**)`, so they do not enter context as prose either;
 "never loaded as skills, never invokable, not readable whole" — see
 `docs/dev-only-skills.md`.
 
-**Note 2026-08-09:** `--plugin-dir` cannot reach cloud or web sessions, so these
-skills are unavailable there. Declaring the plugin in `.claude/settings.json`
-was tried and disproved by a cloud-session probe — the declaration installs
-nothing — and was removed rather than left asserting a capability the repository
-does not have. See `docs/dev-only-skills.md` for the evidence and the remaining
-options.
+**Note 2026-08-09:** `--plugin-dir` cannot reach cloud or web sessions. An
+initial `enabledPlugins`-only declaration was tried and disproved because a
+clean cloud environment knew no marketplace by that name. A later supervised
+change declares a SHA-pinned inline marketplace and the exact plugin ID, with an
+inverse override in `loop/agent-settings.json`. That route remains blocked from
+merge until `.claude/cloud-plugin-acceptance.json` records the fresh-cloud and
+subagent acceptance evidence. See `docs/dev-only-skills.md`.
 
 `tests/test_dev_plugins.py` asserts the invariants that keep it that way:
 `.claude/skills/` does not exist, a declared `enabledPlugins` is accompanied by
@@ -36,8 +37,8 @@ the runner controls, `run_session.sh` passes no `--plugin-dir`/`--plugin-url`,
 no nested `.claude/` tree exists under `dev/plugins/`, and no vendored skill
 ships hooks, MCP servers, `allowed-tools`, or executables.
 
-That is sufficient for the requirement. The rest of this request is about
-turning one convention into an enforced control.
+Those controls cover the autonomous side of the requirement. The cloud-delivery
+side is complete only when the protected acceptance receipt turns green.
 
 ## Part A — APPLIED: remove skills from the session agent
 
@@ -58,8 +59,11 @@ Claude Code 2.1.226: "Disable all skills"). `--disallowedTools "Skill"` is a
 bare tool name, which removes the tool from the agent's context outright. Either
 alone would do; both are cheap and fail independently. The scoped
 `Read(dev/plugins/**)` deny keeps the vendored tree out of context as prose.
+When project settings enable the pinned cloud plugin, `loop/agent-settings.json`
+adds a fourth control by disabling that exact plugin ID for the autonomous
+invocation.
 
-`tests/test_dev_plugins.py` asserts all three, reading the runner with comment
+`tests/test_dev_plugins.py` asserts all four, reading the runner with comment
 lines stripped so a comment mentioning a flag can neither satisfy nor break the
 assertion.
 
@@ -89,10 +93,11 @@ omitting it from `--allowedTools` does not keep skills away from the session
 agent, and a discoverable skill's description would occupy the agent's context
 regardless of whether it were ever invoked.
 
-This remains a latent gap rather than a live hole, because nothing declares
-these skills to any session. It stops being latent the moment a delivery route
-for cloud sessions is found — any route that reaches them also reaches the loop
-— so the controls below are what would carry the weight, not this flag.
+The SHA-pinned inline marketplace now makes this an active boundary. Project
+settings enable the plugin for ordinary cloud sessions; the autonomous runner's
+explicit settings file disables that exact plugin ID, and the controls below
+remove the skill feature and tool independently. Those controls carry the
+weight, not `--allowedTools`.
 
 ### Why it costs the loop nothing
 
@@ -234,5 +239,6 @@ method and result, and that A/B should be redone if the pattern is ever edited.
 ## Status
 
 Part A is applied and enforced by tests. Part B is blocked on a governance
-decision, not on any technical work. Nothing else in this request is
-outstanding, and the developer-only arrangement works as delivered.
+decision. The pinned cloud-delivery route is implemented but remains
+outstanding until the protected acceptance receipt records direct and subagent
+skill invocation in a fresh cloud session.

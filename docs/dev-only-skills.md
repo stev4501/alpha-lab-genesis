@@ -4,10 +4,11 @@ How third-party Claude Code skills are made available to humans working in this
 repository without becoming usable by the autonomous research sessions launched
 by `loop/run_session.sh`.
 
-As things stand nothing declares these skills to any session, so the loop does
-not load them at all. The runner controls are kept regardless: they are what
-would hold if a future delivery route made the skills discoverable, and they
-were verified against a session that had them installed.
+Developer sessions receive the same reviewed plugin through two delivery paths:
+`bin/dev-session --plugin-dir` for local terminals, and a SHA-pinned inline
+marketplace in `.claude/settings.json` for cloud sessions. The autonomous runner
+passes `loop/agent-settings.json`, which disables that exact plugin before the
+existing feature- and tool-level skill controls are applied.
 
 ## The requirement
 
@@ -68,64 +69,89 @@ their per-repo configuration in `docs/agents/`, which most of them expect to
 `/mattpocock-skills:tdd` — so they cannot shadow a core skill or the bundled
 `/code-review`.
 
-### Cloud and web sessions: unsolved
+### Cloud and web sessions: pinned inline marketplace
 
-`--plugin-dir` only works where you control the launch — a local terminal.
-Claude Code on the web and other cloud sessions are launched by the harness, so
-the flag cannot be injected, and **these skills are not available there.**
+`--plugin-dir` only works where the caller controls the launch. Cloud sessions
+instead use the repository plugin mechanism documented by Claude Code:
+`extraKnownMarketplaces` plus `enabledPlugins` in `.claude/settings.json`.
 
-That is a real limitation, not an oversight. It is recorded here because the
-obvious fix has already been tried and disproved.
-
-#### `enabledPlugins` does not work — tested, twice
-
-The Claude Code docs list three ways a cloud session can receive skills: the
-repo's `.claude/skills/`, a plugin declared in the repo's
-`.claude/settings.json`, or skills enabled for your claude.ai account. The
-second looked ideal, so it was tried:
+The marketplace is declared inline rather than inherited from Anthropic's
+mutable official marketplace. Its only plugin uses an HTTPS Git source pinned
+to the same full upstream SHA as the vendored tree:
 
 ```json
-"enabledPlugins": { "mattpocock-skills@claude-plugins-official": true }
+{
+  "extraKnownMarketplaces": {
+    "alpha-lab-pinned": {
+      "source": {
+        "source": "settings",
+        "name": "alpha-lab-pinned",
+        "plugins": [
+          {
+            "name": "mattpocock-skills",
+            "source": {
+              "source": "url",
+              "url": "https://github.com/mattpocock/skills.git",
+              "sha": "84fdeffd12f2ee307994d1eb6feb48173b6e0502"
+            }
+          }
+        ]
+      },
+      "autoUpdate": false
+    }
+  },
+  "enabledPlugins": {
+    "mattpocock-skills@alpha-lab-pinned": true
+  }
+}
 ```
 
-A fresh cloud session started on the branch carrying that declaration reported:
+The explicit HTTPS URL matters. Claude Code's GitHub shorthand clones over SSH
+by default; a clean environment without a trusted GitHub host key cannot install
+it. The HTTPS source installed successfully from an empty `CLAUDE_CONFIG_DIR`
+and recorded `gitCommitSha` as the expected SHA. The same clean-state probe then
+listed the installed plugin as `enabled: true` under project settings and
+`enabled: false` when Claude Code was launched with
+`--settings loop/agent-settings.json`.
 
-| Probe | Result |
-| :--- | :--- |
-| skills matching "mattpocock" | **NO** — zero matches in the registry |
-| `cat ~/.claude/plugins/installed_plugins.json` | `No such file or directory` |
-| `ls ~/.claude/plugins/marketplaces` | `No such file or directory` |
-| invoking `/mattpocock-skills:tdd` | `Unknown skill: mattpocock-skills:tdd` |
+These probes used Claude Code 2.1.226. Repeat them when the operational CLI
+version changes; the unit tests verify configuration structure but do not
+exercise marketplace download or settings resolution.
 
-Reproduced locally from clean plugin state (fresh clone,
-`CLAUDE_CONFIG_DIR` with no `plugins/`): `claude plugin list` reports
-`No plugins installed.` The declaration is inert — nothing installs the plugin
-on the strength of it. The declaration was therefore removed rather than left
-in place asserting a capability the repository does not have.
+The earlier failed cloud experiment declared only
+`mattpocock-skills@claude-plugins-official`. A clean cloud session had no known
+marketplaces, so the plugin ID had nothing to resolve against. The inline
+marketplace supplies that missing half without relying on developer-local plugin
+state.
 
-A caution for anyone tempted to retry it: an early A/B *appeared* to prove it
-worked. That run was in a container where `claude plugin install --scope
-project` had just populated `~/.claude/plugins/`, so it measured the local
-install, not the declaration. Test from clean plugin state or not at all.
+Cloud installation is still an external integration seam. Before this change is
+merged, start a completely new cloud session on the branch using a cloud
+environment with **Trusted** network access, accept any repository plugin trust
+prompt, and verify:
 
-#### What is left
+1. `/mattpocock-skills:tdd` appears and can be invoked.
+2. `~/.claude/plugins/installed_plugins.json` records
+   `mattpocock-skills@alpha-lab-pinned`.
+3. The recorded `gitCommitSha` is
+   `84fdeffd12f2ee307994d1eb6feb48173b6e0502`.
+4. A subagent whose tools include `Skill` can discover and invoke
+   `/mattpocock-skills:tdd`; invoked skill content is not inherited from the
+   parent and must be discovered independently.
 
-- **Local terminal** — `bin/dev-session`, which works. For persistence outside
-  this repo, `claude plugin install mattpocock-skills` at user scope.
-- **Untested lead** — the failing cloud sessions had no `~/.claude/plugins/` at
-  all, so `claude-plugins-official` was not a known marketplace and
-  `plugin@marketplace` had nothing to resolve against. Declaring the marketplace
-  with `extraKnownMarketplaces` may be the missing half. Unverified.
-- **Documented fallback** — committing the skills to `.claude/skills/`, which
-  the docs say cloud sessions do load. It costs namespacing: project skills are
-  invoked as `/code-review`, not `/mattpocock-skills:code-review`, and this
-  collection ships a `code-review` skill that would then **replace** the bundled
-  one. Renaming the directory avoids that. Not done; it is a decision, not a
-  drop-in.
+Do not use a resumed session for this acceptance check; plugin registration
+happens at session startup.
 
-Whatever route is chosen, it must not weaken the autonomous path: anything that
-makes these skills discoverable puts them in front of the loop agent, and the
-runner controls below are what keep them unusable there.
+Record the result in `.claude/cloud-plugin-acceptance.json`. Its contract test
+deliberately fails while `status` is `pending`; change it to `verified` only
+after recording the environment name, cloud session URL, verification time,
+installed SHA, and successful direct and subagent invocations. Because
+`.claude/` is human-owned under ADR-0009, the autonomous loop cannot satisfy its
+own release gate.
+
+The autonomous GitHub workflow pins Claude Code 2.1.226, the version used for
+the clean-state install and settings-precedence probes. Upgrading that pin
+requires rerunning those probes and the compatibility procedure in
+`docs/dev-only-skills.md` before changing the workflow.
 
 ## Why the runner's `--allowedTools` is not sufficient on its own
 
@@ -154,15 +180,23 @@ skills away from an autonomous session; if a skill were discoverable, the agent
 could invoke it, and its description would sit in the agent's context either
 way.
 
-This is a gap in a layer rather than an active hole today, because nothing
-declares these skills to any session. It stops being latent the moment a
-delivery route is found — any route that reaches cloud sessions also reaches the
-loop — so the explicit controls below are what hold, not this flag.
+The cloud declaration makes this an active boundary rather than a latent one.
+Project settings enable the plugin for ordinary developer sessions. The
+autonomous runner's explicit settings file disables the exact plugin ID, and
+the feature- and tool-level controls below remain independent backstops.
 
 ## The applied backstop
 
-`loop/run_session.sh` passes two independent controls on the `claude -p`
-invocation:
+`loop/run_session.sh` already passes `loop/agent-settings.json` through
+`--settings`. That file contains the inverse of the project declaration:
+
+```json
+"enabledPlugins": {
+  "mattpocock-skills@alpha-lab-pinned": false
+}
+```
+
+The runner also passes two independent controls on the `claude -p` invocation:
 
 ```bash
 --disable-slash-commands \
@@ -174,11 +208,17 @@ invocation:
 Claude's context* outright rather than denying matching calls. Either alone
 would do; both are cheap and fail independently.
 
+This settings-precedence guarantee assumes no organization-managed setting
+force-enables the plugin. Managed settings outrank command-line and project
+settings and are outside this repository's control. If such a policy is ever
+introduced, the autonomous runner needs a managed-policy exception or a
+stronger startup mode that disables all plugins.
+
 This costs the loop nothing, because the repository makes no use of the `Skill`
-tool on the autonomous path (see above). It converts the guarantee from "the
-loop was not handed the flag" into "the loop structurally cannot run a skill" —
-including anything a future delivery route makes discoverable, and one someone
-later drops into `.claude/skills/` by mistake.
+tool on the autonomous path (see above). The settings override prevents this
+plugin from loading for the runner; the two skill controls additionally convert
+the guarantee into "the loop structurally cannot run a skill," including one
+someone later drops into `.claude/skills/` by mistake.
 
 `loop/` is human-owned under ADR-0009; this was applied at the operator's
 explicit direction during review, and `tests/test_dev_plugins.py` asserts the

@@ -54,5 +54,8 @@
       "Bash(pip install *)",
       "Bash(npm *)"
     ]
+  },
+  "enabledPlugins": {
+    "mattpocock-skills@alpha-lab-pinned": false
   }
 }

@@ -33,7 +33,8 @@ jobs:
       - name: Install deps
         run: |
           pip install pytest jsonschema
-          npm install -g @anthropic-ai/claude-code
+          npm install -g @anthropic-ai/claude-code@2.1.226
+          claude --version | grep -F "2.1.226 (Claude Code)"
 
       - name: Configure git identity
         run: |

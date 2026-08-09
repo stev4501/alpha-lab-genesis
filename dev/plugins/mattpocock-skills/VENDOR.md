@@ -54,18 +54,14 @@ in a repository whose integrity rules are enforced by convention as well as by
 
 ## Relationship to the marketplace copy
 
-Anthropic's official marketplace ships this plugin pinned to the same commit
-recorded above, so an install from there and this vendored tree agree today.
-Nothing in this repository points at the marketplace: an attempt to declare it
-via `enabledPlugins` was removed after a cloud-session probe showed the
-declaration does not install anything. See `docs/dev-only-skills.md`.
+Cloud sessions use the inline `alpha-lab-pinned` marketplace declared in
+`.claude/settings.json`. Its HTTPS Git source is pinned directly to the full
+commit above, so the repository controls both delivery routes. The official
+Anthropic marketplace is not part of this path and cannot silently advance the
+cloud copy.
 
-If a future change does adopt the marketplace route, note that this repository
-would not control the pin — the marketplace does, and it can change what runs
-without any change here. Check for drift with:
-
-    grep -A4 '"name": "mattpocock-skills"' \
-      ~/.claude/plugins/marketplaces/claude-plugins-official/.claude-plugin/marketplace.json
+`tests/test_dev_plugins.py` asserts that the inline source, vendored provenance,
+and autonomous override retain the same plugin ID and SHA.
 
 ## Do not
 
