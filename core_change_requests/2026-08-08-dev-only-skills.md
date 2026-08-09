@@ -23,12 +23,12 @@ denies `Read(dev/plugins/**)`, so they do not enter context as prose either;
 "never loaded as skills, never invokable, not readable whole" — see
 `docs/dev-only-skills.md`.
 
-**Superseded 2026-08-09:** `.claude/settings.json` now declares
-`mattpocock-skills@claude-plugins-official`, because `--plugin-dir` cannot reach
-cloud or web sessions and those are where this repository is worked on. The
-plugin therefore loads into autonomous sessions too, and the runner controls in
-Part A are what make that safe — verified by A/B against the live CLI. See
-`docs/dev-only-skills.md`.
+**Note 2026-08-09:** `--plugin-dir` cannot reach cloud or web sessions, so these
+skills are unavailable there. Declaring the plugin in `.claude/settings.json`
+was tried and disproved by a cloud-session probe — the declaration installs
+nothing — and was removed rather than left asserting a capability the repository
+does not have. See `docs/dev-only-skills.md` for the evidence and the remaining
+options.
 
 `tests/test_dev_plugins.py` asserts the invariants that keep it that way:
 `.claude/skills/` does not exist, a declared `enabledPlugins` is accompanied by
@@ -89,10 +89,10 @@ omitting it from `--allowedTools` does not keep skills away from the session
 agent, and a discoverable skill's description would occupy the agent's context
 regardless of whether it were ever invoked.
 
-That was a latent gap while nothing was discoverable. It went live on
-2026-08-09, deliberately: `enabledPlugins` now declares the plugin so cloud and
-web sessions can reach it, which makes it discoverable to the autonomous session
-too. The controls below are no longer a backstop — they are the enforcement.
+This remains a latent gap rather than a live hole, because nothing declares
+these skills to any session. It stops being latent the moment a delivery route
+for cloud sessions is found — any route that reaches them also reaches the loop
+— so the controls below are what would carry the weight, not this flag.
 
 ### Why it costs the loop nothing
 

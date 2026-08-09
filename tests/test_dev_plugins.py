@@ -102,59 +102,34 @@ class TestDevPluginsStayOutOfAutonomousSessions(unittest.TestCase):
             ".claude/skills/ exists: skills placed there load into autonomous sessions too",
         )
 
-    #: The exact declaration cloud and web sessions depend on.
-    REQUIRED_PLUGIN = "mattpocock-skills@claude-plugins-official"
-
-    def _project_settings(self):
-        path = CLAUDE_DIR / "settings.json"
-        self.assertTrue(path.is_file(), ".claude/settings.json is missing")
-        return json.loads(path.read_text(encoding="utf-8"))
-
-    def test_required_plugin_is_declared_for_cloud_sessions(self):
-        """Cloud delivery is required behaviour, so assert it — never skip.
-
-        `--plugin-dir` only works where the launch is under your control. Cloud
-        and web sessions are launched by the harness, so a repo declaration is
-        the only route these skills have into them. An earlier version of this
-        test skipped when `enabledPlugins` was absent, which meant deleting the
-        declaration left the suite green and the delivery silently broken.
-        """
-        declared = self._project_settings().get("enabledPlugins") or {}
-        self.assertIn(
-            self.REQUIRED_PLUGIN, declared,
-            f"{self.REQUIRED_PLUGIN} is not declared in .claude/settings.json; "
-            "cloud and web sessions will not receive these skills",
-        )
-        self.assertIs(
-            declared[self.REQUIRED_PLUGIN], True,
-            f"{self.REQUIRED_PLUGIN} is declared but not enabled (value must be true)",
-        )
-
     def test_declaring_plugins_requires_the_runner_controls(self):
-        """A declared plugin is only safe while the runner strips skills.
+        """If project settings ever declare a plugin, the runner must strip skills.
 
-        `enabledPlugins` makes the plugin discoverable to any session that reads
-        project settings. The runner controls are what keep it unusable on the
-        autonomous path, so the two must move together.
+        Conditional on purpose. An earlier revision asserted a specific
+        `enabledPlugins` entry unconditionally, because that declaration was
+        believed to be how cloud sessions received these skills. A probe on a
+        fresh cloud session disproved it (see docs/dev-only-skills.md), so the
+        declaration was removed — and a test demanding a key that does nothing
+        would fail the suite for anyone who sensibly deleted it.
+
+        The invariant that survives is the safety one: a declared plugin loads
+        into any session reading project settings, so declaring one is only safe
+        while the runner removes skills. Nothing declared, nothing to check.
         """
-        if not (self._project_settings().get("enabledPlugins") or {}):
-            self.fail("no plugins declared; see test_required_plugin_is_declared_for_cloud_sessions")
+        settings_path = CLAUDE_DIR / "settings.json"
+        if not settings_path.is_file():
+            self.skipTest("no .claude/settings.json")
+        declared = json.loads(settings_path.read_text(encoding="utf-8")).get("enabledPlugins") or {}
+        if not declared:
+            return  # nothing declared: the invariant is vacuously satisfied
         runner = runner_code()
-        self.assertIn("--disable-slash-commands", runner)
-        self.assertRegex(runner, r'--disallowedTools\s+"Skill"')
-
-    def test_required_plugin_has_a_vendored_counterpart(self):
-        """The two delivery routes must carry the same plugin.
-
-        Scoped to the plugin this repository actually ships. It deliberately
-        does not require every future enabled plugin to be vendored — that
-        would be unrelated coupling.
-        """
-        name = self.REQUIRED_PLUGIN.split("@", 1)[0]
         self.assertIn(
-            name, {p.name for p in plugin_dirs()},
-            f"{name} is declared for cloud sessions but not vendored under dev/plugins/, "
-            "so bin/dev-session and the cloud route would diverge",
+            "--disable-slash-commands", runner,
+            f"project settings declare plugins {list(declared)} but the runner does not disable skills",
+        )
+        self.assertRegex(
+            runner, r'--disallowedTools\s+"Skill"',
+            f"project settings declare plugins {list(declared)} but the runner does not remove the Skill tool",
         )
 
     def _run_wrapper(self, *args, claude_bin="/bin/false"):

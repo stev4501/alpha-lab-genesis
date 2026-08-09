@@ -54,8 +54,5 @@
       "Bash(pip install *)",
       "Bash(npm *)"
     ]
-  },
-  "enabledPlugins": {
-    "mattpocock-skills@claude-plugins-official": true
   }
 }

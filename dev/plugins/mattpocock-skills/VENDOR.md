@@ -54,19 +54,18 @@ in a repository whose integrity rules are enforced by convention as well as by
 
 ## Relationship to the marketplace copy
 
-`.claude/settings.json` declares `mattpocock-skills@claude-plugins-official` so
-that cloud and web sessions get these skills; `bin/dev-session` uses this
-vendored tree. Anthropic's official marketplace pins its entry to the same
-commit recorded above, so the two agree today.
+Anthropic's official marketplace ships this plugin pinned to the same commit
+recorded above, so an install from there and this vendored tree agree today.
+Nothing in this repository points at the marketplace: an attempt to declare it
+via `enabledPlugins` was removed after a cloud-session probe showed the
+declaration does not install anything. See `docs/dev-only-skills.md`.
 
-They can drift if the marketplace bumps its pin. To check:
+If a future change does adopt the marketplace route, note that this repository
+would not control the pin — the marketplace does, and it can change what runs
+without any change here. Check for drift with:
 
     grep -A4 '"name": "mattpocock-skills"' \
       ~/.claude/plugins/marketplaces/claude-plugins-official/.claude-plugin/marketplace.json
-
-If the `sha` no longer matches the commit in the table above, the web route is
-running code this repository has not reviewed. Either re-vendor to the new
-commit and re-verify, or pin the web route elsewhere.
 
 ## Do not
 
