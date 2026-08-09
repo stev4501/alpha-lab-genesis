@@ -4,7 +4,7 @@
   by `workflow_dispatch` and observed that the branch was still on the remote
   when the session ended
 - Status: **proposed** — nothing applied. Patch attached and verified.
-  Revised 2026-08-09 after review round 1 on PR #13; see "Review round 1".
+  Revised 2026-08-09 after review rounds 1 and 2 on PR #13; see those sections.
 - Requires sealed changes: no
 - Requires protected-path changes: yes (`loop/`, `.github/`) — human applies
 - Related: `docs/adr/0008-mvp-reduction.md` (exit criterion 2),
@@ -184,6 +184,29 @@ there.
 Three paths repeated log/increment/continue. Folded into a `keep()` helper;
 the four keep paths that now exist each read as one line.
 
+## Review round 2 (PR #13, 2026-08-09)
+
+One finding, and a real one: **every push failure was reported as a stale
+lease.** The deletion path sent `git push` diagnostics to `/dev/null` and
+treated any nonzero exit as the benign race, so an expired token, a revoked
+permission, branch protection, or a 500 from the remote all printed
+`branch moved since enumeration` and the job exited 0.
+
+That is the worst failure mode this script could have. A pruner that reports a
+clean run while silently deleting nothing is worse than one that crashes,
+because a crash gets looked at and a clean run does not — and the operator's
+conclusion ("pruning works") would be wrong for as long as the credential
+stayed broken.
+
+A stale lease is now the only nonzero exit treated as benign, matched against
+the preserved stderr rather than assumed from the exit code. Every other
+failure prints git's own diagnostics and increments a counter that makes the
+workflow exit 1. `LC_ALL=C` pins the message the match depends on, so a
+localized runner cannot turn a real error back into a silent keep.
+
+The three deletion outcomes are now distinguishable, which they were not
+before: deleted, benignly skipped, and broken.
+
 ## Verification
 
 `loop/prune_branches.sh` passes `bash -n`. It was exercised against a
@@ -216,11 +239,35 @@ KEEP   failed/2020-02-02-0202 — commit 639fee80 not present locally; state mov
 ```
 
 Branch gains work between enumeration and delete, injected live during a
-`DRY_RUN=false` run (finding 2) — the lease refuses and the work survives:
+`DRY_RUN=false` run (round 1 finding 2) — the lease refuses and the work
+survives, and this stays a keep with exit 0 after the round 2 change:
 
 ```
-KEEP   failed/2020-01-01-0101 — lease on 3bc53288 was stale; branch moved since enumeration
-Deleted 0 branch(es), kept 4.
+KEEP   failed/2020-01-01-0101 — lease on 84954579 was stale; branch moved since enumeration
+Deleted 0 branch(es), kept 1.
+script exit=0
+```
+
+Remote refuses the deletion for a reason that is not a lease mismatch (round 2),
+reproduced with a `pre-receive` hook standing in for branch protection —
+previously a silent keep and exit 0:
+
+```
+ERROR  failed/2020-01-01-0101 — deletion failed, and not because of a stale lease:
+       remote: branch protection: deletion of refs/heads/failed/2020-01-01-0101 is not permitted
+        ! [remote rejected] failed/2020-01-01-0101 (pre-receive hook declined)
+Deleted 0 branch(es), kept 0.
+FATAL: 1 deletion(s) failed for reasons other than a stale lease.
+script exit=1
+```
+
+Ordinary successful deletion, confirming the stricter handling did not break
+the path it guards:
+
+```
+DELETE failed/2020-01-01-0101 — no unique commits, 2412d old, past 0d
+Deleted 1 branch(es), kept 0.
+script exit=0
 ```
 
 Run unmodified against this repository's real remote in dry-run mode, it

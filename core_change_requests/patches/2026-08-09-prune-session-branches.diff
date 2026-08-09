@@ -62,10 +62,10 @@ index 0000000..b852724
 +        run: bash loop/prune_branches.sh
 diff --git a/loop/prune_branches.sh b/loop/prune_branches.sh
 new file mode 100755
-index 0000000..bd75baf
+index 0000000..97f75d8
 --- /dev/null
 +++ b/loop/prune_branches.sh
-@@ -0,0 +1,142 @@
+@@ -0,0 +1,163 @@
 +#!/usr/bin/env bash
 +# prune_branches.sh — retention policy for the branches run_session.sh leaves
 +# on the remote. Lives in loop/ (protected). The session agent never edits this
@@ -118,7 +118,11 @@ index 0000000..bd75baf
 +
 +kept=0
 +removed=0
++failures=0
 +keep() { echo "KEEP   $1 — $2"; kept=$((kept + 1)); }
++
++PUSH_ERR="$(mktemp)"
++trap 'rm -f "$PUSH_ERR"' EXIT
 +
 +# Enumerate BEFORE fetching, and treat the enumerated sha as the authority for
 +# the rest of the run. Reading state from a tracking ref instead would mean
@@ -187,24 +191,41 @@ index 0000000..bd75baf
 +
 +  if [[ "$DRY_RUN" == "true" ]]; then
 +    echo "WOULD  ${branch} — ${what}, ${age_days}d old, past ${limit}d"
-+  else
-+    # Delete under a lease on the exact commit that was judged. If the branch
-+    # moved since enumeration, the remote refuses and the work survives to be
-+    # re-evaluated — including its journal check — on the next run.
-+    if git push -q origin \
-+         --force-with-lease="refs/heads/${branch}:${sha}" \
-+         --delete "refs/heads/${branch}" 2>/dev/null; then
-+      echo "DELETE ${branch} — ${what}, ${age_days}d old, past ${limit}d"
-+    else
-+      keep "$branch" "lease on ${sha:0:8} was stale; branch moved since enumeration"
-+      continue
-+    fi
++    removed=$((removed + 1))
++    continue
 +  fi
-+  removed=$((removed + 1))
++
++  # Delete under a lease on the exact commit that was judged. If the branch
++  # moved since enumeration, the remote refuses and the work survives to be
++  # re-evaluated — including its journal check — on the next run.
++  #
++  # A stale lease is the ONLY nonzero exit treated as benign. Everything else a
++  # push can fail on — expired credentials, a revoked token, branch protection,
++  # DNS, a 500 from the remote — must not be laundered into "the branch moved".
++  # A pruner that reports a clean run while silently deleting nothing is worse
++  # than one that fails, because nobody goes looking. LC_ALL=C pins the message
++  # this match depends on against a localized runner.
++  if LC_ALL=C git push -q origin \
++       --force-with-lease="refs/heads/${branch}:${sha}" \
++       --delete "refs/heads/${branch}" 2>"$PUSH_ERR"; then
++    echo "DELETE ${branch} — ${what}, ${age_days}d old, past ${limit}d"
++    removed=$((removed + 1))
++  elif grep -qF "stale info" "$PUSH_ERR"; then
++    keep "$branch" "lease on ${sha:0:8} was stale; branch moved since enumeration"
++  else
++    echo "ERROR  ${branch} — deletion failed, and not because of a stale lease:" >&2
++    sed 's/^/       /' "$PUSH_ERR" >&2
++    failures=$((failures + 1))
++  fi
 +done
 +
 +if [[ "$DRY_RUN" == "true" ]]; then
 +  echo "Dry run: ${removed} branch(es) would be deleted, ${kept} kept."
 +else
 +  echo "Deleted ${removed} branch(es), kept ${kept}."
++fi
++
++if [[ "$failures" -ne 0 ]]; then
++  echo "FATAL: ${failures} deletion(s) failed for reasons other than a stale lease." >&2
++  exit 1
 +fi
