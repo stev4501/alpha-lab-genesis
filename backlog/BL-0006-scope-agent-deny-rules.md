@@ -1,6 +1,7 @@
 # BL-0006: Scope the agent deny rules to the runner
 
-- Status: open (one narrowing applied 2026-08-08; the scoping decision remains)
+- Status: **closed 2026-08-09** — option 3 decided by the operator and applied
+  (see "Decided 2026-08-09" below)
 - Priority: 6
 - Requires sealed changes: no
 - Requires protected-path changes: yes (`loop/`, `.claude/`) — human applies
@@ -106,8 +107,59 @@ Option 1 remains the correct default for `Edit`/`Write` on `loop/`,
 `evaluator/`, and `scripts/`: the patch handoff cost about two minutes, and the
 friction falls exactly on the changes that deserve it.
 
+## Decided 2026-08-09: option 3, applied
+
+The operator decided it directly, in a supervised session, in these terms: the
+agent operating inside the GitHub Action should avoid altering the core; a human
+working in the repository with an agent should not be subject to that rule.
+That is option 3.
+
+**What moved to `loop/agent-settings.json`**, passed to the unattended agent
+with `--settings`: `evaluator/`, `scripts/`, `schemas/`, `loop/`, `.github/`,
+`.claude/`, `CORE_MANIFEST.json`, `MISSION.md`, `CONTEXT.md`, `CODEOWNERS`, and
+the network/install denies (`curl`, `wget`, `pip install`, `npm`).
+
+**What stayed in `.claude/settings.json`**, binding every session in this
+repository: `results/`, `reviews/`, `data/snapshots|raw|provenance/`, and the
+`main`/history guardrails narrowed on 2026-08-08. Recorded evidence should be
+immutable to any automated writer regardless of supervision; that property has
+nothing to do with who is watching.
+
+Three things about the shape of the applied change, since option 2's stated
+trade — "any future automation that forgets the flag is unconstrained" — applies
+to option 3 equally:
+
+1. `loop/agent-settings.json` restates the repo-wide rules rather than relying
+   on the union of settings sources. It does not need to; it does so that
+   trimming `.claude/settings.json` in a later session cannot silently loosen
+   the unattended path. `tests/test_agent_settings.py` fails if the runner's
+   file ever stops being a superset.
+2. `run_session.sh` treats a missing or unparseable settings file as fatal in
+   preflight rather than running the session anyway. Tested behaviourally
+   against a scratch repository, with a positive control, because "the runner
+   refuses" is the whole point of the check.
+3. A test derives check 1's protected-path regex out of
+   `loop/validate_session.sh` and asserts every path in it has a matching deny.
+   A path added to the gate but not to the rules would otherwise cost a session
+   ninety minutes and then fail validation.
+
+**Against the recommendation below.** That section argued option 1 was the
+correct default for `loop/`, `evaluator/`, and `scripts/`, on the grounds that
+the patch handoff costs about two minutes and the friction falls on changes that
+deserve it. The operator weighed it and chose otherwise; the two-minute estimate
+also understates it — this session's own attempt to apply the change was refused
+by the rules it was changing, and the work reached the branch through the GitHub
+API instead, exactly as the section below describes happening on 2026-08-08.
+The argument is left standing rather than rewritten, because it is the reason
+the evidence paths did not move.
+
 ## Definition of done
 
 A decision on the scoping question (options 1–3) is recorded in a journal entry
 and, if anything changes, ADR-0008's "Enforcement reality" section is updated to
 describe which layer constrains which kind of session.
+
+**Done 2026-08-09.** Journal: `journals/2026-08-09-deny-rule-scoping.md`.
+ADR-0008's "Enforcement reality" was superseded by ADR-0009's "Enforcement,
+honestly, by layer" before this decision landed, so the amendment is recorded
+there instead.

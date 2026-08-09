@@ -32,8 +32,11 @@ to weigh; nothing sealed was touched and no recorded evidence changed.
   `FAILURES.md` (open blockers B-0001, B-0003, both owned by the dormant
   `data-integrity` skill).
 - Work queue: `backlog/` — one item per file, priority order in the filename.
-  BL-0001 is now DONE; BL-0005 is RESCINDED (ADR-0009). Open: BL-0002 (2),
-  BL-0003 (3), BL-0004 (4), BL-0006 (6).
+  BL-0001 is now DONE; BL-0005 is RESCINDED (ADR-0009); BL-0006 is CLOSED
+  (supervised, 2026-08-09 — the deny rules that own the core moved to
+  `loop/agent-settings.json` and reach the agent through `--settings`; see
+  `journals/2026-08-09-deny-rule-scoping.md`). Open: BL-0002 (2), BL-0003 (3),
+  BL-0004 (4).
 - Operative skills: `genesis-orchestrator`, `experiment-loop`,
   `memory-handoff`. Six other skills are physically present but dormant
   pending the G-0004 change (see ADR-0008); do not invoke them.
