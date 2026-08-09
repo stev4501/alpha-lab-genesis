@@ -1,0 +1,20 @@
+{
+  "status": "pending",
+  "environmentName": "Alpha Lab Dev",
+  "configDir": "/opt/alpha-lab-dev/claude-config",
+  "pluginId": "mattpocock-skills@alpha-lab-pinned",
+  "gitCommitSha": "84fdeffd12f2ee307994d1eb6feb48173b6e0502",
+  "claudeVersion": "2.1.226",
+  "networkAccess": "Trusted",
+  "setupScriptSha256": "11c8b0626c1653ea78ddd93c2e5f6219e528ca0cba3d2400d407877f6eb0f580",
+  "setupScriptDigestMatched": false,
+  "firstSessionDirectInvocation": false,
+  "firstSessionSubagentInvocation": false,
+  "firstSessionSetupRan": false,
+  "cachedSessionDirectInvocation": false,
+  "cachedSessionSetupSkipped": false,
+  "firstSessionUrl": "",
+  "cachedSessionUrl": "",
+  "verifiedAt": "",
+  "notes": "Configure the cloud environment from docs/cloud-environment-dev-skills.md, then record first-session and cached-session evidence."
+}

@@ -112,10 +112,16 @@ install, not the declaration. Test from clean plugin state or not at all.
 
 - **Local terminal** — `bin/dev-session`, which works. For persistence outside
   this repo, `claude plugin install mattpocock-skills` at user scope.
-- **Untested lead** — the failing cloud sessions had no `~/.claude/plugins/` at
-  all, so `claude-plugins-official` was not a known marketplace and
-  `plugin@marketplace` had nothing to resolve against. Declaring the marketplace
-  with `extraKnownMarketplaces` may be the missing half. Unverified.
+- **Disproved repository route** — PR #17 added both an inline
+  `extraKnownMarketplaces` declaration and exact `enabledPlugins` entry. Two
+  independent fresh cloud sessions still created no marketplace or installed
+  plugin and reported `Unknown skill`. Repository declarations do not trigger
+  automatic cloud installation on Claude Code 2.1.226.
+- **Cloud environment installation** — `dev/cloud/setup-mattpocock-skills.sh`
+  explicitly creates a pinned local marketplace, installs the plugin before
+  Claude launches, and verifies the installed SHA and enabled state. See
+  `docs/cloud-environment-dev-skills.md`. This is environment-scoped rather than
+  repository-scoped and remains subject to fresh-cloud acceptance.
 - **Documented fallback** — committing the skills to `.claude/skills/`, which
   the docs say cloud sessions do load. It costs namespacing: project skills are
   invoked as `/code-review`, not `/mattpocock-skills:code-review`, and this
