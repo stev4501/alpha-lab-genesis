@@ -11,8 +11,7 @@ concurrency:
   cancel-in-progress: false
 
 permissions:
-  contents: write         # push the session branch (never main, since BL-0005)
-  pull-requests: write    # gh pr create in loop/run_session.sh
+  contents: write
 
 jobs:
   session:
@@ -24,8 +23,8 @@ jobs:
           fetch-depth: 0
           # fetch-depth: 0 is required: validate_session.sh diffs against
           # main and verifies sealed hashes against the pre-mvp-freeze tag.
-          # Read the note on SESSION_PR_TOKEN below before assuming the
-          # default GITHUB_TOKEN is enough here.
+          # Default GITHUB_TOKEN can push, but pushes won't trigger other
+          # workflows. Fine here; switch to a PAT/App token if that changes.
 
       - uses: actions/setup-python@v5
         with:
@@ -44,23 +43,6 @@ jobs:
       - name: Run session
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-          # Which token opens the session pull request decides whether the
-          # required check can ever run. GitHub does not trigger workflows
-          # from events created with the default GITHUB_TOKEN, so a pull
-          # request opened with it gets NO pull_request run, and a required
-          # session-validate check would sit pending forever.
-          #
-          # Set SESSION_PR_TOKEN to a GitHub App installation token (or a
-          # machine-account fine-grained PAT with contents:write and
-          # pull-requests:write) before enabling the required check. Its
-          # author must not be the human reviewer: GitHub forbids a pull
-          # request's author from supplying its own approving review.
-          #
-          # Until that secret exists this falls back to GITHUB_TOKEN, which
-          # opens pull requests fine — it just cannot trigger the check. That
-          # fallback also needs Settings > Actions > General > "Allow GitHub
-          # Actions to create and approve pull requests" enabled.
-          GH_TOKEN: ${{ secrets.SESSION_PR_TOKEN || secrets.GITHUB_TOKEN }}
           SESSION_MINUTES: "90"
           MAX_BUDGET_USD: "5"
         run: bash loop/run_session.sh
