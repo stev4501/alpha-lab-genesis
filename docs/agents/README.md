@@ -75,9 +75,11 @@ skills load and their configuration does not, so `to-spec`, `to-tickets`,
 The wrapper's refusal message prints the full two-flag command for this reason.
 
 What *is* true unconditionally is the direction that matters for safety: the
-autonomous runner invokes neither the wrapper nor `--plugin-dir`, and strips
-skills regardless. `tests/test_dev_plugins.py` asserts the wrapper keeps passing
-the pointer, checking the emitted argv rather than the script text.
+autonomous runner invokes neither `bin/dev-session` nor `--plugin-dir`, and
+strips skills regardless. `tests/test_dev_session.py` asserts the pointer keeps
+being passed, capturing the emitted argv rather than reading the script text —
+`tests/test_dev_plugins.py` holds the repository-level invariants and makes no
+claim about argv.
 
 If you later create `CLAUDE.md` or `AGENTS.md` for other reasons, keep this in
 mind before adding the block — and note that anything in those files reaches the

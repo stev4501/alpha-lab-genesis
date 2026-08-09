@@ -338,6 +338,11 @@ pointer, and its own failure modes, every assertion about it had to go through a
 stubbed subprocess. As Python its rules are importable, which is what lets the
 flag table be exhaustive instead of representative.
 
+The rewrite was raised as a judgement call and directed by the operator, not
+taken on the implementer's initiative — the accretion was flagged, and the
+answer was to make it a script with its own tests. Recorded here because the
+diff on its own looks like scope that arrived without being asked for.
+
 This is a guardrail, not a boundary, and the distinction is load-bearing. The
 wrapper rejects **selected explicit print, background, and cloud flag forms** —
 it is not a general "interactive only" gate and does not claim to be. Claude
