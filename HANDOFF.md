@@ -1,23 +1,20 @@
 # Handoff
 
-Rewritten 2026-08-09 by autonomous session `2026-08-09-0525` (research mode).
+Rewritten 2026-08-09 by autonomous session `2026-08-09-0800` (research mode).
 Every autonomous session rewrites this file completely, except the
 "Exit criteria" section, which persists with updated progress notes.
 
 ## Current state (three sentences)
 
 The repository is healthy — `scripts/validate_repository.py` reports valid and
-`python -m pytest tests -q` is 50 passed / 112 subtests — and the loop is still
+`python -m pytest tests -q` is 47 passed / 112 subtests — and the loop is still
 in its loop-proving phase, so research remains frozen: no new strategy
 experiments, no hypothesis registration, no holdout access. Session
-2026-08-09-0525 closed BL-0001 by adding `tests/test_golden_replay_e0002.py`,
-which re-runs the sealed EV-0002 evaluator over E-0002's preregistered inputs in
-a scratch root and shows that `equity.csv`, `trades.csv`, and `validity.json`
-reproduce byte-for-byte while `metrics.json` differs in exactly one field
-(`turnover`, last two digits) for a proven reason: CPython 3.12 changed `sum()`
-over floats to compensated summation, E-0002 was recorded on >= 3.12, and the
-loop runner pins 3.11. That finding is routed into BL-0002's scope as an input
-to weigh; nothing sealed was touched and no recorded evidence changed.
+2026-08-09-0800 closed BL-0002 on the agent side by filing
+`core_change_requests/CCR-0001-g0004-validity-stamps.md`, the G-0004 request to
+make the five validity stamps earned instead of hardcoded; it now awaits human
+approval, which is exit criterion 5 and is not the agent's to perform. Nothing
+sealed, protected, or evidential was touched, and no second unit was started.
 
 ## Orientation for a fresh agent
 
@@ -32,54 +29,84 @@ to weigh; nothing sealed was touched and no recorded evidence changed.
   `FAILURES.md` (open blockers B-0001, B-0003, both owned by the dormant
   `data-integrity` skill).
 - Work queue: `backlog/` — one item per file, priority order in the filename.
-  BL-0001 is now DONE; BL-0005 is RESCINDED (ADR-0009). Open: BL-0002 (2),
+  BL-0001 and BL-0002 are DONE; BL-0005 is RESCINDED (ADR-0009). Open:
   BL-0003 (3), BL-0004 (4), BL-0006 (6).
+- Change requests: `core_change_requests/`. `CCR-0001-g0004-validity-stamps.md`
+  is the only one awaiting approval; the other three are applied, withdrawn, or
+  historical.
 - Operative skills: `genesis-orchestrator`, `experiment-loop`,
   `memory-handoff`. Six other skills are physically present but dormant
   pending the G-0004 change (see ADR-0008); do not invoke them.
 - Known, deliberately unfixed defect: `evaluator/daily_bar.py` writes the five
-  validity stamps (`lookahead_check`, `survivorship_check`, `leakage_check`,
-  `corporate_action_check`, `missing_data_check`) as `"passed"`
-  unconditionally. It is reserved as the first test of the human-approval
-  gate (backlog item BL-0002). Leave it alone.
+  validity stamps as `"passed"` unconditionally (lines 429–437). It is reserved
+  as the first test of the human-approval gate. **Leave it alone** — the
+  request describing its fix is now filed, and filing it does not authorize
+  applying it.
 
 ## Exact next action
 
-Take **BL-0002** (`backlog/BL-0002-g0004-change-request.md`), now the
-highest-priority open item, and produce
-`core_change_requests/CCR-0001-g0004-validity-stamps.md` per the seven-point
-list in that file. It is a drafting task: write the request, touch nothing
-sealed, and stop at the human approval point. Read the "Input from BL-0001
-(2026-08-09)" section added to that file — you must decide, and argue either
-way in the request, whether recording/pinning the interpreter version belongs
-in the G-0004 scope.
+Take **BL-0003** (`backlog/BL-0003-b0003-provider-evidence.md`), now the
+highest-priority open item: write `docs/b0003-provider-evidence.md` enumerating
+what a data provider would have to expose for point-in-time status to be
+verifiable rather than asserted, per the six elements in that file, and append
+(do not edit) an updated "Resolution or next action" note to B-0003 in
+`FAILURES.md`.
 
-Do not start a second unit. If BL-0002 is finished with time left, spend it on
-journal quality, not on BL-0003.
+Read CCR-0001 section 3.5 first. It gives BL-0003 a concrete consumer it did not
+have: `corporate_action_check` is the G-0004 check that would consume BL-0003's
+elements 3 (revision identifiers) and 5 (adjustment semantics), and under the
+proposed promotion gate that check sitting at `"not_run"` is one of the two
+things that would block every promotion. BL-0003's element 6 ("what minimum
+subset makes B-0003 closable") should be answered against that specific
+consumer rather than in the abstract.
+
+Do not start a second unit. Do not retrieve data. Do not change any dataset's
+status.
 
 ## Open questions
 
-1. **Should the interpreter version be part of the experiment contract?**
-   `design.environment_id` is the free-text string `"python-stdlib-mvp"`.
-   Nothing records or enforces a CPython version, and E-0002's `turnover`
-   demonstrably depends on it. Answering this belongs to BL-0002's drafting.
-2. **Is `STATE.json` supposed to track the loop-proving phase at all?** Its
-   `run` block still describes a completed run from 2026-08-06 and its
-   `next_actions` are frozen research. No autonomous session has updated it,
-   and no rule says one should. Someone should decide deliberately whether
-   sessions maintain it or whether `backlog/` + `HANDOFF.md` are the state of
-   record during loop-proving; until decided, sessions have been leaving it
-   alone, which is the safe default.
-3. **BL-0006's scoping decision (options 1-3) is still open** and unaffected by
+1. **Should promotion be permanently blocked while checks are honestly
+   `not_run`?** CCR-0001 §2.4 says yes and declines to propose a waiver, on the
+   grounds that the first use of a waiver would be to paper over the very gap it
+   exists to record. It costs nothing today (research frozen, no promotion
+   pending) and could cost everything later. This is the single most consequential
+   judgment in the request and the human should engage it directly.
+2. **Should `survivorship_check` return `not_applicable` or `not_run`** on a
+   one-symbol static universe? CCR-0001 §3.3 chose `not_applicable`, which under
+   §2.4's accept-set is the difference between promotable and not. It is the one
+   verdict in that request's table that is a judgment call rather than a fact.
+3. **Interpreter version: recorded, not enforced.** CCR-0001 §8 decides this
+   (record it in `design.environment_id`, include in G-0004 scope because
+   `scripts/preregister_experiment.py` is sealed under the same component) and
+   states the counter-argument — require an enforced environment digest instead —
+   fairly. Open question 1 from the previous handoff is therefore answered, not
+   still open; what remains is whether the human agrees.
+4. **Is `STATE.json` supposed to track the loop-proving phase at all?** Carried
+   forward unchanged. Its `run` block still describes a completed run from
+   2026-08-06 and its `next_actions` are frozen research. No autonomous session
+   has updated it and no rule says one should; sessions have been leaving it
+   alone, which is the safe default. Note that A-0008's description ("prepare the
+   narrow G-0004 change proposal") is the ancestor of CCR-0001, but A-0008 is
+   owned by a dormant skill and its prerequisite is unmet — CCR-0001 was filed
+   under BL-0002's authority and is deliberately narrower.
+5. **BL-0006's scoping decision (options 1–3) is still open** and unaffected by
    anything this session did.
 
 ## Time-sensitive
 
-Nothing. The 2026-08-09-0505 failure (unfunded `ANTHROPIC_API_KEY`; the agent
-died 311 ms in, before producing a token) is resolved — this session ran to
-completion on the same workflow, which is the evidence that credits exist. That
-branch, `failed/2026-08-09-0505`, contains no work and needs no salvage. Do not
-treat it as maintenance input.
+Nothing is time-sensitive. Two things are worth knowing before they are
+misread:
+
+- The test count moved from 50 to 47 between the previous handoff and this one.
+  Nothing broke: supervised commit `260e88f` (2026-08-09 07:04 UTC) reverted the
+  `enabledPlugins` declaration after a cloud probe disproved it and removed the
+  three tests that asserted it. The subtest count is unchanged at 112.
+- If and when a human applies G-0004, expect `loop/validate_session.sh` to fail
+  in the window between resealing the hashes and creating the successor freeze
+  tag. That failure is correct. **Do not resolve it by editing hashes** — see
+  CCR-0001 §6a, which also explains why the successor tag must be named
+  `pre-g0004-freeze` (the ruleset pattern is `refs/tags/pre-*`; a tag named
+  outside it is created successfully, protected by nothing, and errors nowhere).
 
 ## Exit criteria (persistent — update progress notes only)
 
@@ -87,9 +114,9 @@ The loop is proved when all five have been demonstrated:
 
 1. Five consecutive scheduled sessions with no human input mid-run, each
    leaving a validated artifact and an updated handoff with
-   `loop/validate_session.sh` green. — progress: 1/5 pending validation.
-   `2026-08-09-0525` is the first session to produce work; whether it counts
-   depends on the runner's validator passing, which the session cannot
+   `loop/validate_session.sh` green. — progress: 2/5 pending validation.
+   `2026-08-09-0525` and `2026-08-09-0800` each produced work; whether they
+   count depends on the runner's validator passing, which a session cannot
    self-certify. `2026-08-09-0505` does not count — it never produced a token
    (API credits), so it is not evidence about the loop either way. Counting
    starts with the first scheduled session after the ADR-0009 revert landed
@@ -109,5 +136,8 @@ The loop is proved when all five have been demonstrated:
    repository state and does not redo completed work. — not attempted
 5. One full human-approval round trip: the agent files the validity-stamp
    change request (BL-0002), the human approves, a sealed G-0004 lands, and
-   the agent resumes under it. — not attempted; the agent-side half is the
-   next action above.
+   the agent resumes under it. — **agent-side half complete 2026-08-09**:
+   `core_change_requests/CCR-0001-g0004-validity-stamps.md` is filed and
+   BL-0002 is closed. The remaining three quarters (approve, land, resume) are
+   human-gated and cannot be advanced by any session until the human acts. No
+   autonomous session should treat the filing as permission to implement.
