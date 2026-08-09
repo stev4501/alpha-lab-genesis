@@ -70,7 +70,20 @@ The loop is proved when all five have been demonstrated:
    change request (BL-0002), the human approves, a sealed G-0004 lands, and
    the agent resumes under it. — not attempted
 
-## SESSION 2026-08-09-0505 FAILED VALIDATION
-Branch preserved at failed/2026-08-09-0505. First failed check:
-FAIL: HANDOFF.md not updated
-Next session: treat this as maintenance input.
+## SESSION 2026-08-09-0505 FAILED VALIDATION — cause known, no repo defect
+
+The auto-appended salvage note said "First failed check: FAIL: HANDOFF.md not
+updated" and to treat this as maintenance input. A human read the runner
+artifacts (`agent_result.json`) and corrected the record: the agent process
+died 311 ms after launch, on its first turn, with the API error "Credit
+balance is too low" — the workflow's `ANTHROPIC_API_KEY` had no credits. The
+session never produced a token, so the missing journal and handoff are the
+symptom, not the failure.
+
+Do NOT treat this as maintenance input: the repository is healthy (all seven
+integrity checks passed; only the two produce-something checks failed), and
+`failed/2026-08-09-0505` contains no work — the branch is byte-identical to
+its base. The human resolves this by funding the API account; no session
+action is needed or possible. If you are reading this, credits presumably
+exist now: proceed with the normal backlog, highest-priority open item first
+(BL-0001).
