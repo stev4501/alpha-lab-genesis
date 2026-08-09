@@ -7,7 +7,9 @@ loop/run_session.sh. See docs/dev-only-skills.md.
 
 import json
 import os
+import pathlib
 import subprocess
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -148,22 +150,44 @@ class TestDevPluginsStayOutOfAutonomousSessions(unittest.TestCase):
         )
 
     def test_dev_session_provides_the_config_pointer(self):
-        """The wrapper must tell the skills where their configuration lives.
+        """The wrapper must actually emit the config pointer, not just mention it.
 
         Most mattpocock skills expect the issue tracker and label vocabulary to
         "have been provided" and never name a path; only code-review references
         docs/agents/issue-tracker.md directly. The setup skill normally provides
         it through an `## Agent skills` block in CLAUDE.md or AGENTS.md, which
         this repository deliberately does not have — that file would be
-        auto-loaded into every autonomous session too. The wrapper injects the
-        pointer instead, so removing it silently strands the skills.
+        auto-loaded into every autonomous session too.
+
+        Asserted against emitted argv rather than the script text. An earlier
+        version grepped the source, which a comment could satisfy and which
+        would not have noticed the flag being built but never passed.
         """
-        wrapper = (ROOT / "bin" / "dev-session").read_text(encoding="utf-8")
-        code = "\n".join(
-            line for line in wrapper.splitlines() if not line.lstrip().startswith("#")
+        with tempfile.TemporaryDirectory() as tmp:
+            argv_log = pathlib.Path(tmp) / "argv"
+            stub = pathlib.Path(tmp) / "stub"
+            stub.write_text(
+                "#!/usr/bin/env bash\nprintf '%s\\n' \"$@\" > " + str(argv_log) + "\n",
+                encoding="utf-8",
+            )
+            stub.chmod(0o755)
+            result = self._run_wrapper("--model", "sonnet", claude_bin=str(stub))
+            self.assertEqual(result.returncode, 0, result.stderr)
+            argv = argv_log.read_text(encoding="utf-8").splitlines()
+
+        self.assertIn("--plugin-dir", argv, f"plugin not loaded; argv={argv}")
+        self.assertIn(
+            "--append-system-prompt-file", argv,
+            f"config pointer not passed; argv={argv}",
         )
-        self.assertIn("--append-system-prompt", code)
-        self.assertIn("docs/agents/", code)
+        prompt_path = pathlib.Path(argv[argv.index("--append-system-prompt-file") + 1])
+        self.assertTrue(prompt_path.is_file(), f"pointer file missing: {prompt_path}")
+
+        # The pointer is useless unless it names every file it is meant to reach.
+        pointer = prompt_path.read_text(encoding="utf-8")
+        for config in ("issue-tracker.md", "triage-labels.md", "domain.md"):
+            with self.subTest(config=config):
+                self.assertIn(config, pointer, f"pointer does not name {config}")
 
     def test_dev_session_refuses_unattended_flag_forms(self):
         """The selected print, background, and cloud flag forms are refused.

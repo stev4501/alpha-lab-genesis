@@ -54,15 +54,30 @@ a replacement would leave `to-spec`, `to-tickets`, `triage`, and `wayfinder`
 unable to find this configuration — they would ask for setup to be re-run, which
 would rewrite these files and change nothing.
 
-`bin/dev-session` supplies the pointer instead, via `--append-system-prompt`. It
-reaches exactly the sessions that can use these skills and no others: the
-autonomous runner does not invoke the wrapper, and strips skills regardless.
-`tests/test_dev_plugins.py` asserts the wrapper still carries it.
+`bin/dev-session` supplies the pointer instead, passing
+`--append-system-prompt-file docs/agents/session-prompt.md`. That text lives in
+a file precisely so the direct route can carry the same pointer with one extra
+flag rather than reproducing a paragraph by hand.
 
-The trade is that the pointer is session-scoped rather than repository-wide. A
-session started with plain `claude` rather than `bin/dev-session` gets neither
-the plugin nor the pointer — consistent, since without the plugin there are no
-skills to configure.
+**The claim is about wrapper-launched sessions, not all sessions that can load
+the plugin.** The wrapper itself points at a direct invocation for anyone who
+wants headless-with-skills, and that route loads the plugin. It carries the
+configuration only if it also passes the flag:
+
+```bash
+claude --plugin-dir dev/plugins/mattpocock-skills \
+       --append-system-prompt-file docs/agents/session-prompt.md
+```
+
+Omitting the second flag is a supported opt-out with a known consequence: the
+skills load and their configuration does not, so `to-spec`, `to-tickets`,
+`triage`, and `wayfinder` will ask for `/setup-matt-pocock-skills` to be re-run.
+The wrapper's refusal message prints the full two-flag command for this reason.
+
+What *is* true unconditionally is the direction that matters for safety: the
+autonomous runner invokes neither the wrapper nor `--plugin-dir`, and strips
+skills regardless. `tests/test_dev_plugins.py` asserts the wrapper keeps passing
+the pointer, checking the emitted argv rather than the script text.
 
 If you later create `CLAUDE.md` or `AGENTS.md` for other reasons, keep this in
 mind before adding the block — and note that anything in those files reaches the

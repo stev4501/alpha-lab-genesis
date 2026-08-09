@@ -29,10 +29,16 @@ label that does not exist will fail. Create them once before the first triage
 run:
 
 ```bash
+set -e
 for l in needs-triage needs-info ready-for-agent ready-for-human; do
-  gh label create "$l" --repo stev4501/alpha-lab-genesis || true
+  gh label create "$l" --force --repo stev4501/alpha-lab-genesis
 done
 ```
+
+`--force` updates the label if it already exists, so the loop is safe to re-run.
+Failures are deliberately **not** suppressed: an auth, permission, network, or
+wrong-repo error must surface, because a silently skipped label makes the first
+`/triage` run fail at the point of applying it.
 
 `ready-for-agent` means an AFK coding agent working from a GitHub issue. It does
 **not** mean the autonomous research loop: that agent works from

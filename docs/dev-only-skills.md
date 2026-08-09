@@ -55,8 +55,14 @@ The plugin is vendored at `dev/plugins/mattpocock-skills/`, which is not a
 discovery path at any level. It is loaded per-session with an explicit flag:
 
 ```bash
-bin/dev-session          # == claude --plugin-dir dev/plugins/mattpocock-skills
+bin/dev-session
+# == claude --plugin-dir dev/plugins/mattpocock-skills \
+#           --append-system-prompt-file docs/agents/session-prompt.md
 ```
+
+Both flags matter. `--plugin-dir` loads the skills; the second points them at
+their per-repo configuration in `docs/agents/`, which most of them expect to
+"have been provided" without naming a path. See `docs/agents/README.md`.
 
 `loop/run_session.sh` passes no `--plugin-dir`. Plugin skills are namespaced —
 `/mattpocock-skills:tdd` — so they cannot shadow a core skill or the bundled

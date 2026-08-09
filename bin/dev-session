@@ -43,7 +43,9 @@ PLUGIN_DIRS=(
 # --disable-slash-commands plus --disallowedTools "Skill" "Read(dev/plugins/**)".
 #
 # A developer who genuinely wants headless-with-skills can invoke claude
-# directly with --plugin-dir and own that decision explicitly.
+# directly with --plugin-dir and own that decision explicitly. That route must
+# also pass --append-system-prompt-file docs/agents/session-prompt.md, or the
+# skills load without their configuration.
 #
 # Print mode is not the only way to get an unattended session, so the guard
 # covers a class rather than a flag:
@@ -105,8 +107,10 @@ for arg in "$@"; do
   esac
   echo "dev-session: refusing $arg (print, background and cloud session flags)." >&2
   echo "  These plugins are scoped to interactive developer sessions." >&2
-  echo "  To opt out deliberately, call claude directly:" >&2
-  echo "    claude --plugin-dir dev/plugins/mattpocock-skills $arg ..." >&2
+  echo "  To opt out deliberately, call claude directly — include the config" >&2
+  echo "  pointer, or the skills start unconfigured:" >&2
+  echo "    claude --plugin-dir dev/plugins/mattpocock-skills \\" >&2
+  echo "           --append-system-prompt-file docs/agents/session-prompt.md $arg ..." >&2
   exit 2
 done
 
@@ -126,14 +130,17 @@ done
 # references docs/agents/issue-tracker.md directly. The setup skill's normal
 # answer is an `## Agent skills` block in CLAUDE.md or AGENTS.md, which is
 # auto-loaded project memory and would therefore also land in every autonomous
-# session. Injecting the pointer here instead reaches exactly the sessions that
-# can use these skills, and no others. See docs/agents/README.md.
-CONFIG_POINTER="Developer skill configuration for this repository is in docs/agents/: \
-issue-tracker.md (GitHub issues, and why backlog/ is a separate queue), \
-triage-labels.md, and domain.md (glossary and ADR rules). \
-Skills that expect an issue tracker, triage label vocabulary, or domain-doc \
-layout to have been provided should read those files rather than asking for \
-/setup-matt-pocock-skills to be re-run."
+# session. Injecting the pointer here instead reaches wrapper-launched sessions
+# only. See docs/agents/README.md.
+#
+# The text lives in a file rather than inline so that a direct
+# `claude --plugin-dir ...` invocation can carry the same pointer with one extra
+# flag, instead of having to reproduce a paragraph by hand.
+CONFIG_PROMPT="$REPO_DIR/docs/agents/session-prompt.md"
+if [[ ! -f "$CONFIG_PROMPT" ]]; then
+  echo "dev-session: missing $CONFIG_PROMPT — skills would start unconfigured." >&2
+  exit 1
+fi
 
 cd "$REPO_DIR"
-exec "$CLAUDE_BIN" "${PLUGIN_ARGS[@]}" --append-system-prompt "$CONFIG_POINTER" "$@"
+exec "$CLAUDE_BIN" "${PLUGIN_ARGS[@]}" --append-system-prompt-file "$CONFIG_PROMPT" "$@"
