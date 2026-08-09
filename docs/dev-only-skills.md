@@ -92,20 +92,48 @@ This is a gap in a layer, not an active hole: nothing is discoverable today, and
 the arrangement above keeps it that way. But it means the guarantee currently
 rests on a flag being absent from one script rather than on an enforced control.
 
-## The recommended backstop
+## The applied backstop
 
-Add `--disallowedTools "Skill"` to the `claude -p` invocation in
-`loop/run_session.sh`. A bare tool name in `--disallowedTools` *removes the tool
-from Claude's context* outright, rather than denying matching calls.
+`loop/run_session.sh` passes two independent controls on the `claude -p`
+invocation:
 
-Because this repository makes no use of the `Skill` tool on the autonomous path
-(see above), this costs the loop nothing and converts the guarantee from
-"the loop was not handed the flag" into "the loop structurally cannot run a
-skill" — including one that someone later drops into `.claude/skills/` by
-mistake.
+```bash
+--disable-slash-commands \
+--disallowedTools "Skill" "Read(dev/plugins/**)" \
+```
 
-`loop/` is a protected path, so this change is applied by a human. The patch is
-in `core_change_requests/2026-08-08-loop-skill-backstop.md`.
+`--disable-slash-commands` disables skills at the feature level.
+`--disallowedTools "Skill"` is a bare tool name, which *removes the tool from
+Claude's context* outright rather than denying matching calls. Either alone
+would do; both are cheap and fail independently.
+
+This costs the loop nothing, because the repository makes no use of the `Skill`
+tool on the autonomous path (see above). It converts the guarantee from "the
+loop was not handed the flag" into "the loop structurally cannot run a skill" —
+including one that someone later drops into `.claude/skills/` by mistake.
+
+`loop/` is human-owned under ADR-0009; this was applied at the operator's
+explicit direction during review, and `tests/test_dev_plugins.py` asserts the
+runner still carries both controls.
+
+## What the guarantee is, precisely
+
+The vendored skills are **never loaded as skills, never invokable, and not
+readable whole** by an autonomous session.
+
+That last clause is narrower than it may sound, and the difference matters.
+`dev/plugins/` holds ordinary files inside the repository. Not passing
+`--plugin-dir` means they are never registered as skills and their descriptions
+never enter the agent's context — but it does nothing to stop the agent reading
+them as prose, and `Read`, `Glob`, and `Grep` are all allowlisted for the
+session agent. The scoped `Read(dev/plugins/**)` deny closes the read path.
+
+`Glob` and `Grep` are not covered: an autonomous session can still list paths
+under `dev/plugins/` and see lines matching a search. Denying those too would
+cost more than it buys — the agent needs `Glob` and `Grep` across the tree, and
+permission patterns for them do not scope cleanly by path. So the honest
+statement of the boundary is the one above: not loaded, not invokable, not
+readable whole. It is not "the autonomous agent cannot know these files exist".
 
 ## Adding another developer-only plugin
 

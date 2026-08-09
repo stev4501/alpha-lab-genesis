@@ -6,6 +6,7 @@ loop/run_session.sh. See docs/dev-only-skills.md.
 """
 
 import json
+import subprocess
 import unittest
 from pathlib import Path
 
@@ -13,6 +14,20 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 DEV_PLUGINS = ROOT / "dev" / "plugins"
 CLAUDE_DIR = ROOT / ".claude"
+
+
+def runner_code():
+    """loop/run_session.sh with comment lines stripped.
+
+    Assertions about what the runner does must read the code, not the prose
+    around it. A comment explaining that no --plugin-dir is passed would
+    otherwise fail a naive substring check, and — worse — a comment mentioning
+    --disallowedTools would satisfy one.
+    """
+    text = (ROOT / "loop" / "run_session.sh").read_text(encoding="utf-8")
+    return "\n".join(
+        line for line in text.splitlines() if not line.lstrip().startswith("#")
+    )
 
 
 def plugin_dirs():
@@ -101,9 +116,40 @@ class TestDevPluginsStayOutOfAutonomousSessions(unittest.TestCase):
 
     def test_runner_loads_no_plugins(self):
         """loop/run_session.sh must never pass a plugin flag."""
-        runner = (ROOT / "loop" / "run_session.sh").read_text(encoding="utf-8")
+        runner = runner_code()
         for flag in ("--plugin-dir", "--plugin-url"):
             self.assertNotIn(flag, runner, f"loop/run_session.sh passes {flag}")
+
+    def test_runner_disables_skills(self):
+        """The autonomous session must not be able to run a skill at all.
+
+        Two independent controls, either of which suffices: the feature-level
+        --disable-slash-commands, and a bare "Skill" in --disallowedTools, which
+        drops the tool from the agent's context. Both are asserted so that
+        removing one is a deliberate edit to this test rather than a silent
+        weakening.
+        """
+        runner = runner_code()
+        self.assertIn("--disable-slash-commands", runner)
+        self.assertRegex(runner, r'--disallowedTools\s+"Skill"')
+
+    def test_runner_denies_reading_vendored_plugins(self):
+        """Vendored skills are not loaded here; keep them out of context as prose too."""
+        runner = runner_code()
+        self.assertIn('"Read(dev/plugins/**)"', runner)
+
+    def test_dev_session_refuses_non_interactive(self):
+        """bin/dev-session must not be usable to get skills into a headless run."""
+        wrapper = ROOT / "bin" / "dev-session"
+        self.assertTrue(wrapper.is_file(), "bin/dev-session missing")
+        for flag in ("-p", "--print"):
+            result = subprocess.run(
+                [str(wrapper), flag, "noop"],
+                capture_output=True, text=True, cwd=ROOT,
+            )
+            with self.subTest(flag=flag):
+                self.assertEqual(result.returncode, 2, f"{flag} was not refused")
+                self.assertIn("refusing non-interactive mode", result.stderr)
 
 
 class TestVendoredPluginsGrantNoTools(unittest.TestCase):

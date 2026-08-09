@@ -93,6 +93,27 @@ PROMPT="$(sed -e "s/{{SESSION_ID}}/${SESSION_ID}/g" \
 # do NOT fire in -p mode; .claude/settings.json deny rules and this allowlist
 # are the only permission layers before validation.
 #
+# Two things --allowedTools does not do, both covered explicitly below.
+#
+# First, it is an auto-approve list, not a restricting allowlist -- omitted
+# tools stay available and fall back to prompting, which on this unattended
+# path means denied. That covers permission-gated tools (Bash, Edit, Write),
+# which is why BL-0006's reasoning about git push holds. It does not cover the
+# Skill tool: Claude invokes skills without a permission prompt. So skills are
+# removed two ways -- --disable-slash-commands disables the feature, and a bare
+# "Skill" in --disallowedTools drops the tool from the agent's context. Either
+# alone would do; both are cheap and fail independently. This costs the session
+# agent nothing: the nine core skills live at skills/<name>/SKILL.md, which is
+# not a Claude Code discovery path, and session.md has the agent read them with
+# Read rather than invoke them.
+#
+# Second, dev/plugins/ holds vendored third-party skills for developer sessions
+# (see docs/dev-only-skills.md). They are never loaded here -- no --plugin-dir
+# is passed -- but they are ordinary files in the tree, so the scoped Read deny
+# keeps them out of context as prose too. Glob and Grep can still surface their
+# paths and matching lines; the guarantee is that they are never loaded as
+# skills, never invokable, and not readable whole.
+#
 # Deliberately NOT allowlisted: "cat" and "ls". Bash patterns match the command
 # string, so "cat x > loop/validate_session.sh" satisfies "Bash(cat *)" while
 # writing to a path the Edit/Write deny rules protect. Read, Glob, and Grep
@@ -102,6 +123,8 @@ set +e
 timeout --signal=TERM "${SESSION_MINUTES}m" \
   "$CLAUDE_BIN" -p "$PROMPT" \
     --allowedTools "Read,Glob,Grep,Edit,Write,Bash(git status),Bash(git status *),Bash(git add *),Bash(git commit *),Bash(git log *),Bash(git diff *),Bash(git show *),Bash(python scripts/validate_repository.py *),Bash(python scripts/validate_repository.py),Bash(python scripts/preregister_experiment.py *),Bash(python scripts/finalize_experiment.py *),Bash(python scripts/record_evidence_review.py *),Bash(python scripts/register_market_snapshot.py *),Bash(python scripts/normalize_finance_ohlcv.py *),Bash(python evaluator/daily_bar.py *),Bash(python -m pytest *),Bash(mkdir -p *)" \
+    --disable-slash-commands \
+    --disallowedTools "Skill" "Read(dev/plugins/**)" \
     --max-turns "$MAX_TURNS" \
     --max-budget-usd "$MAX_BUDGET_USD" \
     --output-format json \

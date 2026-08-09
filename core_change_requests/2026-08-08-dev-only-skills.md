@@ -3,9 +3,11 @@
 - Origin: supervised session, 2026-08-08, while vendoring the `mattpocock-skills`
   plugin for developer use
 - Requires sealed changes: no
-- Requires protected-path changes: yes — Part A touches `loop/`; Part B also
-  touches `.claude/` and `CODEOWNERS`, and amends ADR-0009's ownership
-  enumeration. Human applies.
+- Status: **Part A applied** to `loop/run_session.sh` on 2026-08-09 at the
+  operator's explicit direction during review of PR #3. **Part B is blocked**
+  pending an explicit ADR-0009 amendment — do not apply it before then.
+- Requires protected-path changes: Part A touched `loop/` (done); Part B would
+  touch `loop/`, `.claude/`, and `CODEOWNERS`.
 - Related: `backlog/BL-0006-scope-agent-deny-rules.md`, `docs/adr/0009-agent-owned-operations.md`,
   `docs/dev-only-skills.md`
 
@@ -15,7 +17,11 @@ The plugin is vendored at `dev/plugins/mattpocock-skills/` (25 skills, upstream
 commit `84fdeff`, MIT). That path is not a Claude Code discovery path at any
 level, so nothing loads it implicitly. `bin/dev-session` starts a supervised
 session with `--plugin-dir` pointing at it; `loop/run_session.sh` passes no
-plugin flag, so autonomous sessions load nothing.
+plugin flag, so autonomous sessions never load them as skills. The runner also
+denies `Read(dev/plugins/**)`, so they do not enter context as prose either;
+`Glob` and `Grep` can still surface paths and matching lines. The guarantee is
+"never loaded as skills, never invokable, not readable whole" — see
+`docs/dev-only-skills.md`.
 
 `tests/test_dev_plugins.py` asserts the invariants that keep it that way:
 `.claude/skills/` does not exist, `.claude/settings.json` declares no
@@ -26,13 +32,29 @@ ships hooks, MCP servers, `allowed-tools`, or executables.
 That is sufficient for the requirement. The rest of this request is about
 turning one convention into an enforced control.
 
-## Part A — recommended: remove the `Skill` tool from the session agent
+## Part A — APPLIED: remove skills from the session agent
 
-**Patch:** `core_change_requests/patches/2026-08-08-a-skill-backstop.diff`
-(verified with `git apply --check`)
+Applied directly to `loop/run_session.sh`. The patch file
+`patches/2026-08-08-a-skill-backstop.diff` was regenerated to match exactly what
+landed and is retained as the record, the same way the PR-mode request retains
+its applied patches. Do not re-apply it.
 
-Adds `--disallowedTools "Skill"` to the `claude -p` invocation, plus a comment
-recording why.
+Two independent controls on the `claude -p` invocation:
+
+```bash
+--disable-slash-commands \
+--disallowedTools "Skill" "Read(dev/plugins/**)" \
+```
+
+`--disable-slash-commands` disables skills at the feature level (confirmed in
+Claude Code 2.1.226: "Disable all skills"). `--disallowedTools "Skill"` is a
+bare tool name, which removes the tool from the agent's context outright. Either
+alone would do; both are cheap and fail independently. The scoped
+`Read(dev/plugins/**)` deny keeps the vendored tree out of context as prose.
+
+`tests/test_dev_plugins.py` asserts all three, reading the runner with comment
+lines stripped so a comment mentioning a flag can neither satisfy nor break the
+assertion.
 
 ### Why the current `--allowedTools` list does not already cover this
 
@@ -72,20 +94,7 @@ Code skills; `loop/prompts/session.md` directs the agent to read them, and it
 does so with `Read`. The autonomous path makes no use of the `Skill` tool at
 all, so removing it changes no current behaviour.
 
-### Suggested follow-up
-
-If Part A is applied, add to `tests/test_dev_plugins.py`:
-
-```python
-def test_runner_removes_the_skill_tool(self):
-    runner = (ROOT / "loop" / "run_session.sh").read_text(encoding="utf-8")
-    self.assertIn('--disallowedTools "Skill"', runner)
-```
-
-It is deliberately omitted for now: the test would be red until the patch lands,
-and a red suite flips the next session into maintenance mode.
-
-## Part B — optional: protect `dev/` and `bin/`
+## Part B — BLOCKED pending an ADR-0009 amendment
 
 **Patch:** `core_change_requests/patches/2026-08-08-b-protect-dev-bin.diff`
 (verified with `git apply --check`) — covers `validate_session.sh`, both loop
@@ -140,24 +149,21 @@ the runner: the pending rescind patch deletes `.github/workflows/session-validat
 so there is no CI copy of the gate once it is applied. Part B's enforcement is
 runner-side and prompt-side only.
 
-## Part A applies in either PR-mode state
+## Interaction with the pending rescind patch
 
-`loop/run_session.sh` has moved twice under this request. PR-mode landed in #5
-(`8906f4f`), rewriting 93 lines; ADR-0009 then rescinded BL-0005 and left
-`patches/2026-08-09-rescind-pr-mode.diff` pending, which reverts it. Part A
-targets the `claude -p` invocation, which both states leave structurally
-intact, so it was tested against both rather than pinned to one:
+`patches/2026-08-09-rescind-pr-mode.diff` is still unapplied and rewrites
+`loop/run_session.sh`. Applying Part A directly to the runner raises the
+obvious question of whether the rescind then reverts it. Tested, not assumed:
 
-| Runner state | Part A result |
+| Step | Result |
 | :--- | :--- |
-| PR-mode applied (current `main`) | applies exactly, hunks at 93 and 113 |
-| Rescind patch applied first | applies, hunks offset −25, back at 68 and 88 |
+| rescind applied over the current runner | applies cleanly, hunks offset +23 |
+| both skill controls afterwards | still present, still after `--allowedTools` |
+| resulting script | parses under `bash -n` |
 
-Both parse under `bash -n` and yield exactly one `--disallowedTools "Skill"`
-directly after `--allowedTools`. **Apply Part A before or after the rescind
-patch; no regeneration needed either way.** `git apply` prints "Hunk N
-succeeded at M (offset −25 lines)" in the post-rescind case — expected, not a
-warning to act on.
+The rescind's hunks sit outside the `claude -p` invocation, so the controls
+survive it and `test_runner_disables_skills` still passes. **Apply the rescind
+whenever you like; it does not undo Part A.**
 
 ### ADR-0009 raises the stakes on the finding above
 

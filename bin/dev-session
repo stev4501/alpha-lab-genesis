@@ -9,7 +9,9 @@
 # Usage:
 #   bin/dev-session                 # interactive session
 #   bin/dev-session /mattpocock-skills:tdd
-#   bin/dev-session -p "..."        # any claude flag is forwarded verbatim
+#
+# Non-interactive mode is refused: see the -p check below. Other claude flags
+# are forwarded verbatim.
 #
 # See docs/dev-only-skills.md for why this is a flag and not a settings entry.
 
@@ -24,6 +26,24 @@ CLAUDE_BIN="${CLAUDE_BIN:-claude}"
 PLUGIN_DIRS=(
   "$REPO_DIR/dev/plugins/mattpocock-skills"
 )
+
+# Refuse non-interactive mode. These skills are for a human at a keyboard; the
+# whole arrangement exists to keep them away from unattended agents. Nothing
+# stops a future script from reaching for this wrapper to get skills into a
+# headless run, so the wrapper refuses rather than relying on nobody trying.
+# A developer who genuinely wants headless-with-skills can invoke claude
+# directly with --plugin-dir and own that decision explicitly.
+for arg in "$@"; do
+  case "$arg" in
+    -p|--print)
+      echo "dev-session: refusing non-interactive mode ($arg)." >&2
+      echo "  These plugins are scoped to interactive developer sessions." >&2
+      echo "  To opt out deliberately, call claude directly:" >&2
+      echo "    claude --plugin-dir dev/plugins/mattpocock-skills $arg ..." >&2
+      exit 2
+      ;;
+  esac
+done
 
 PLUGIN_ARGS=()
 for dir in "${PLUGIN_DIRS[@]}"; do
