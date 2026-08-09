@@ -114,25 +114,26 @@ Applying the `validate_session.sh` half alone would let a session burn 90
 minutes and then fail the gate for a change it was never warned off. Apply both
 halves or neither.
 
-## Interaction with the pending PR-mode patches
+## Rebased onto PR-mode
 
-`core_change_requests/2026-08-08-pr-mode-loop.md` (merged to main in #4) also
-carries an unapplied patch against `loop/run_session.sh`. Both are pending at
-the same time, so the composition was tested rather than assumed.
+The BL-0005 PR-mode runner patch landed on main in #5 (`1fdd47f`), which
+rewrote 93 lines of `loop/run_session.sh` — the file Part A targets. Part A has
+been **regenerated against post-#5 `main`** and now applies exactly, with no
+line offsets. Its hunks sit at lines 93 and 113, inside the `claude -p`
+invocation PR-mode left structurally intact.
 
-They touch disjoint regions. The PR-mode runner patch has hunks at original
-lines 2, 16, 32, 98, and 130; Part A's are at 68 and 77, in the `claude -p`
-invocation the PR-mode patch does not modify. Verified in both orders against
-`main` at `016d4f9`:
+Earlier revisions of this document described composing Part A with a
+then-unapplied PR-mode patch. That is now history: PR-mode is applied, and the
+patch in `patches/` targets the current file. Nothing about the change itself
+moved — still one `--disallowedTools "Skill"`, positioned directly after
+`--allowedTools`.
 
-| Order | Result |
-| :--- | :--- |
-| PR-mode, then Part A | applies, hunks offset +25 |
-| Part A, then PR-mode | applies, hunks offset +12 |
-
-In both cases the composed script parses under `bash -n` and carries exactly one
-`--disallowedTools "Skill"`, positioned directly after `--allowedTools`. No
-ordering constraint; apply them in either order.
+Note that #5 also added `.github/workflows/session-validate.yml`, which runs the
+session gate on pull requests to `main`. It classifies by head ref: `session/*`
+gets the full validator, `salvage/*` a narrative-only check, and anything else
+is passed through as "governed by review". Part A does not interact with it —
+the workflow reads `validate_session.sh` from the base ref, and Part A does not
+touch that file.
 
 ## How to apply
 
@@ -146,8 +147,7 @@ python scripts/validate_repository.py
 python -m unittest discover -s tests
 ```
 
-`git apply` reports "Hunk N succeeded at M (offset X lines)" when the PR-mode
-patch has already landed. That is expected, not a warning to act on.
+Both patches apply exactly against current `main`; no offset messages expected.
 
 ## What is blocked until this is applied
 
