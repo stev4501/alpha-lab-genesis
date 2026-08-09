@@ -3,8 +3,9 @@
 - Origin: supervised session, 2026-08-08, while vendoring the `mattpocock-skills`
   plugin for developer use
 - Requires sealed changes: no
-- Requires protected-path changes: yes (`loop/`, and optionally `.claude/`) —
-  human applies
+- Requires protected-path changes: yes — Part A touches `loop/`; Part B also
+  touches `.claude/` and `CODEOWNERS`, and amends ADR-0009's ownership
+  enumeration. Human applies.
 - Related: `backlog/BL-0006-scope-agent-deny-rules.md`, `docs/adr/0009-agent-owned-operations.md`,
   `docs/dev-only-skills.md`
 
@@ -87,10 +88,8 @@ and a red suite flips the next session into maintenance mode.
 ## Part B — optional: protect `dev/` and `bin/`
 
 **Patch:** `core_change_requests/patches/2026-08-08-b-protect-dev-bin.diff`
-(verified with `git apply --check`)
-
-Adds `dev/` and `bin/` to the `PROTECTED` regex in `validate_session.sh` and to
-the hard-rules lists in both loop prompts.
+(verified with `git apply --check`) — covers `validate_session.sh`, both loop
+prompts, `.claude/settings.json`, and `CODEOWNERS` in one commit.
 
 Today `dev/plugins/` and `bin/` are agent-space: an autonomous session could
 rewrite a vendored skill body or the session wrapper. It cannot *load* those
@@ -98,22 +97,48 @@ skills, so this is not an escape route — but editing third-party vendored code
 and developer tooling is outside the mandate in `session.md`, and the vendored
 tree is exactly the kind of content that should change only under review.
 
-If Part B is applied, the deny rules must move in lockstep or the failure mode
-gets worse rather than better. `validate_session.sh` rejects the branch *after*
-the session has spent its budget; the `.claude/settings.json` deny rules stop
-the edit at the point of the attempt. Every other protected path in this repo
-appears in both. Add to `.claude/settings.json`:
+ADR-0009 sharpens this both ways. It removes the pull-request gate, so session
+output now reaches `main` with no human reading the diff — which is the argument
+*for* protecting a vendored third-party tree. But it also enumerates the
+human-owned set precisely, and `dev/` and `bin/` are not in it:
 
-```json
-"Edit(dev/**)",
-"Write(dev/**)",
-"Edit(bin/**)",
-"Write(bin/**)"
-```
+> Sealed components (`evaluator/`, `scripts/`, `schemas/`, `CORE_MANIFEST.json`),
+> the loop machinery and protections (`loop/`, `.github/`, `.claude/`,
+> `CODEOWNERS`, `MISSION.md`, `CONTEXT.md`), generation changes (G-XXXX), and
+> freeze tags move only by human hands after explicit approval.
 
-Applying the `validate_session.sh` half alone would let a session burn 90
-minutes and then fail the gate for a change it was never warned off. Apply both
-halves or neither.
+**So Part B amends ADR-0009's enumeration.** That is a governance decision, not
+a regex tweak, and it should be taken as one — an ADR amendment or a recorded
+journal decision, the same way ADR-0009 recorded its own. If the answer is that
+vendored dev tooling is neither core nor the agent's forward motion and should
+simply not live under a protected path, dropping Part B and leaving `dev/` in
+agent-space is a coherent alternative. Part A does not depend on it.
+
+### All four surfaces move together
+
+An earlier revision of this request said protected paths appear in "both" the
+validator and the deny rules. That was wrong: every machinery path in this repo
+(`evaluator/`, `scripts/`, `schemas/`, `loop/`, `.github/`, `.claude/`) appears
+in **three** places, and ADR-0009 names `CODEOWNERS` as human-owned itself.
+Applying only some of them leaves `dev/` and `bin/` inconsistent with every
+other protected path:
+
+| Surface | Effect if omitted |
+| :--- | :--- |
+| `.claude/settings.json` deny | agent attempts the edit; nothing stops it at the point of the attempt |
+| `loop/validate_session.sh` | the branch is not rejected at the gate |
+| `loop/prompts/*.md` | the agent is never told the path is off-limits |
+| `CODEOWNERS` | no review is requested on the path |
+
+The rebuilt patch covers all four in one commit, so this is now apply-or-don't
+rather than a sequence to get right by hand. The worst outcome — validator
+without deny rules — would let a session burn 90 minutes and then fail the gate
+for a change it was never warned off.
+
+Note that under ADR-0009 the validator runs only from `run_session.sh` inside
+the runner: the pending rescind patch deletes `.github/workflows/session-validate.yml`,
+so there is no CI copy of the gate once it is applied. Part B's enforcement is
+runner-side and prompt-side only.
 
 ## Part A applies in either PR-mode state
 
@@ -167,7 +192,7 @@ work here, applied to a different flag.
 
 ```bash
 git apply core_change_requests/patches/2026-08-08-a-skill-backstop.diff
-# optional, with the settings.json edit above:
+# optional — self-contained, no manual settings.json edit needed:
 git apply core_change_requests/patches/2026-08-08-b-protect-dev-bin.diff
 
 bash -n loop/run_session.sh && bash -n loop/validate_session.sh

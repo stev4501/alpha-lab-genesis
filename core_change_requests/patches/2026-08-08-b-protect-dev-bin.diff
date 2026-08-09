@@ -1,3 +1,31 @@
+diff --git a/.claude/settings.json b/.claude/settings.json
+index a361e89..fbca77e 100644
+--- a/.claude/settings.json
++++ b/.claude/settings.json
+@@ -9,6 +9,10 @@
+       "Write(schemas/**)",
+       "Edit(loop/**)",
+       "Write(loop/**)",
++      "Edit(dev/**)",
++      "Write(dev/**)",
++      "Edit(bin/**)",
++      "Write(bin/**)",
+       "Edit(.github/**)",
+       "Write(.github/**)",
+       "Edit(.claude/**)",
+diff --git a/CODEOWNERS b/CODEOWNERS
+index 3ee1be0..6c03921 100644
+--- a/CODEOWNERS
++++ b/CODEOWNERS
+@@ -8,6 +8,8 @@
+ /loop/               @stev4501
+ /.github/            @stev4501
+ /.claude/            @stev4501
++/dev/                @stev4501
++/bin/                @stev4501
+ /CORE_MANIFEST.json  @stev4501
+ /MISSION.md          @stev4501
+ /CONTEXT.md          @stev4501
 diff --git a/loop/prompts/maintenance.md b/loop/prompts/maintenance.md
 index 88ed424..dead5d4 100644
 --- a/loop/prompts/maintenance.md
