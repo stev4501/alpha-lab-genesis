@@ -39,7 +39,7 @@ carry the unearned stamps in `results/E-0001/validity.json`,
 `results/E-0002/validity.json`, and their `EXPERIMENTS.jsonl` records.
 
 This is worse than an absent check, because `scripts/finalize_experiment.py`
-line 117 *consumes* these stamps: promotion is blocked unless all five read
+lines 116–120 *consume* these stamps: promotion is blocked unless all five read
 `"passed"`. The gate exists, is wired up, and is fed a constant. It would
 pass a strategy with catastrophic lookahead as readily as a sound one.
 
@@ -56,7 +56,7 @@ criterion 5), which is what this document is.
 | `scripts/finalize_experiment.py` | sealed (EV-0002) | Decide the fate of `PROMOTION_CHECKS` under honest stamps (§3.6) | Required to *decide*; possibly zero code change |
 | `CORE_MANIFEST.json` | protected | New sha256 for each changed sealed path; `system_generation` → `G-0004`; `core_skills` becomes the authoritative skill set (§1a) | Required |
 | `loop/validate_session.sh` | protected (not sealed) | `REFERENCE_TAG` → the successor tag, one line | Required, and time-critical — §6a |
-| `schemas/experiment.schema.json` | sealed (EV-0002) | **No change needed.** `$defs.check` already permits `not_run`, `passed`, `failed`, `warning`, `not_applicable`, and all five fields are already required | — |
+| `schemas/experiment.schema.json` | sealed (EV-0002) | **No change needed** — verified, not assumed. `$defs.check` already permits `not_run`, `passed`, `failed`, `warning`, `not_applicable`; all five fields are already in `validity.required`; and `validity` carries `additionalProperties: false`, which is *why* the ledger is a separate artifact rather than a field inside `validity` | — |
 | `schemas/data-manifest.schema.json` | protected | Only if missing-data option (c) is chosen (§3.5): add an optional declared session count per dataset | Conditional |
 
 New unsealed files (agent-writable, no approval needed once G-0004 lands):
