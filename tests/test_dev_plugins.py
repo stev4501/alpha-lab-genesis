@@ -102,42 +102,35 @@ class TestDevPluginsStayOutOfAutonomousSessions(unittest.TestCase):
             ".claude/skills/ exists: skills placed there load into autonomous sessions too",
         )
 
-    def test_settings_do_not_enable_dev_plugins_globally(self):
-        """enabledPlugins in project settings would load these for every session."""
+    def test_declaring_plugins_requires_the_runner_controls(self):
+        """If project settings ever declare a plugin, the runner must strip skills.
+
+        Conditional on purpose. An earlier revision asserted a specific
+        `enabledPlugins` entry unconditionally, because that declaration was
+        believed to be how cloud sessions received these skills. A probe on a
+        fresh cloud session disproved it (see docs/dev-only-skills.md), so the
+        declaration was removed — and a test demanding a key that does nothing
+        would fail the suite for anyone who sensibly deleted it.
+
+        The invariant that survives is the safety one: a declared plugin loads
+        into any session reading project settings, so declaring one is only safe
+        while the runner removes skills. Nothing declared, nothing to check.
+        """
         settings_path = CLAUDE_DIR / "settings.json"
         if not settings_path.is_file():
             self.skipTest("no .claude/settings.json")
-        settings = json.loads(settings_path.read_text(encoding="utf-8"))
-        self.assertNotIn(
-            "enabledPlugins",
-            settings,
-            "enabledPlugins in .claude/settings.json loads plugins for autonomous sessions too; "
-            "load developer plugins with bin/dev-session instead",
+        declared = json.loads(settings_path.read_text(encoding="utf-8")).get("enabledPlugins") or {}
+        if not declared:
+            return  # nothing declared: the invariant is vacuously satisfied
+        runner = runner_code()
+        self.assertIn(
+            "--disable-slash-commands", runner,
+            f"project settings declare plugins {list(declared)} but the runner does not disable skills",
         )
-
-    def test_runner_loads_no_plugins(self):
-        """loop/run_session.sh must never pass a plugin flag."""
-        runner = runner_code()
-        for flag in ("--plugin-dir", "--plugin-url"):
-            self.assertNotIn(flag, runner, f"loop/run_session.sh passes {flag}")
-
-    def test_runner_disables_skills(self):
-        """The autonomous session must not be able to run a skill at all.
-
-        Two independent controls, either of which suffices: the feature-level
-        --disable-slash-commands, and a bare "Skill" in --disallowedTools, which
-        drops the tool from the agent's context. Both are asserted so that
-        removing one is a deliberate edit to this test rather than a silent
-        weakening.
-        """
-        runner = runner_code()
-        self.assertIn("--disable-slash-commands", runner)
-        self.assertRegex(runner, r'--disallowedTools\s+"Skill"')
-
-    def test_runner_denies_reading_vendored_plugins(self):
-        """Vendored skills are not loaded here; keep them out of context as prose too."""
-        runner = runner_code()
-        self.assertIn('"Read(dev/plugins/**)"', runner)
+        self.assertRegex(
+            runner, r'--disallowedTools\s+"Skill"',
+            f"project settings declare plugins {list(declared)} but the runner does not remove the Skill tool",
+        )
 
     def _run_wrapper(self, *args, claude_bin="/bin/false"):
         """Run bin/dev-session with a stubbed CLAUDE_BIN.

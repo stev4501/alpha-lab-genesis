@@ -1,8 +1,13 @@
 # Developer-only skills
 
 How third-party Claude Code skills are made available to humans working in this
-repository without ever becoming available to the autonomous research sessions
-launched by `loop/run_session.sh`.
+repository without becoming usable by the autonomous research sessions launched
+by `loop/run_session.sh`.
+
+As things stand nothing declares these skills to any session, so the loop does
+not load them at all. The runner controls are kept regardless: they are what
+would hold if a future delivery route made the skills discoverable, and they
+were verified against a session that had them installed.
 
 ## The requirement
 
@@ -53,13 +58,68 @@ discovery path at any level. It is loaded per-session with an explicit flag:
 bin/dev-session          # == claude --plugin-dir dev/plugins/mattpocock-skills
 ```
 
-`loop/run_session.sh` passes no `--plugin-dir`, so autonomous sessions load
-nothing. Plugin skills are namespaced — `/mattpocock-skills:tdd` — so they
-cannot shadow a core skill or the bundled `/code-review`.
+`loop/run_session.sh` passes no `--plugin-dir`. Plugin skills are namespaced —
+`/mattpocock-skills:tdd` — so they cannot shadow a core skill or the bundled
+`/code-review`.
 
-The one thing that would break this is adding the plugin to `enabledPlugins` in
-`.claude/settings.json`. That makes it load for every session, including
-autonomous ones. `tests/test_dev_plugins.py` asserts this does not happen.
+### Cloud and web sessions: unsolved
+
+`--plugin-dir` only works where you control the launch — a local terminal.
+Claude Code on the web and other cloud sessions are launched by the harness, so
+the flag cannot be injected, and **these skills are not available there.**
+
+That is a real limitation, not an oversight. It is recorded here because the
+obvious fix has already been tried and disproved.
+
+#### `enabledPlugins` does not work — tested, twice
+
+The Claude Code docs list three ways a cloud session can receive skills: the
+repo's `.claude/skills/`, a plugin declared in the repo's
+`.claude/settings.json`, or skills enabled for your claude.ai account. The
+second looked ideal, so it was tried:
+
+```json
+"enabledPlugins": { "mattpocock-skills@claude-plugins-official": true }
+```
+
+A fresh cloud session started on the branch carrying that declaration reported:
+
+| Probe | Result |
+| :--- | :--- |
+| skills matching "mattpocock" | **NO** — zero matches in the registry |
+| `cat ~/.claude/plugins/installed_plugins.json` | `No such file or directory` |
+| `ls ~/.claude/plugins/marketplaces` | `No such file or directory` |
+| invoking `/mattpocock-skills:tdd` | `Unknown skill: mattpocock-skills:tdd` |
+
+Reproduced locally from clean plugin state (fresh clone,
+`CLAUDE_CONFIG_DIR` with no `plugins/`): `claude plugin list` reports
+`No plugins installed.` The declaration is inert — nothing installs the plugin
+on the strength of it. The declaration was therefore removed rather than left
+in place asserting a capability the repository does not have.
+
+A caution for anyone tempted to retry it: an early A/B *appeared* to prove it
+worked. That run was in a container where `claude plugin install --scope
+project` had just populated `~/.claude/plugins/`, so it measured the local
+install, not the declaration. Test from clean plugin state or not at all.
+
+#### What is left
+
+- **Local terminal** — `bin/dev-session`, which works. For persistence outside
+  this repo, `claude plugin install mattpocock-skills` at user scope.
+- **Untested lead** — the failing cloud sessions had no `~/.claude/plugins/` at
+  all, so `claude-plugins-official` was not a known marketplace and
+  `plugin@marketplace` had nothing to resolve against. Declaring the marketplace
+  with `extraKnownMarketplaces` may be the missing half. Unverified.
+- **Documented fallback** — committing the skills to `.claude/skills/`, which
+  the docs say cloud sessions do load. It costs namespacing: project skills are
+  invoked as `/code-review`, not `/mattpocock-skills:code-review`, and this
+  collection ships a `code-review` skill that would then **replace** the bundled
+  one. Renaming the directory avoids that. Not done; it is a decision, not a
+  drop-in.
+
+Whatever route is chosen, it must not weaken the autonomous path: anything that
+makes these skills discoverable puts them in front of the loop agent, and the
+runner controls below are what keep them unusable there.
 
 ## Why the runner's `--allowedTools` is not sufficient on its own
 
@@ -88,9 +148,10 @@ skills away from an autonomous session; if a skill were discoverable, the agent
 could invoke it, and its description would sit in the agent's context either
 way.
 
-This is a gap in a layer, not an active hole: nothing is discoverable today, and
-the arrangement above keeps it that way. But it means the guarantee currently
-rests on a flag being absent from one script rather than on an enforced control.
+This is a gap in a layer rather than an active hole today, because nothing
+declares these skills to any session. It stops being latent the moment a
+delivery route is found — any route that reaches cloud sessions also reaches the
+loop — so the explicit controls below are what hold, not this flag.
 
 ## The applied backstop
 
@@ -110,7 +171,8 @@ would do; both are cheap and fail independently.
 This costs the loop nothing, because the repository makes no use of the `Skill`
 tool on the autonomous path (see above). It converts the guarantee from "the
 loop was not handed the flag" into "the loop structurally cannot run a skill" —
-including one that someone later drops into `.claude/skills/` by mistake.
+including anything a future delivery route makes discoverable, and one someone
+later drops into `.claude/skills/` by mistake.
 
 `loop/` is human-owned under ADR-0009; this was applied at the operator's
 explicit direction during review, and `tests/test_dev_plugins.py` asserts the
@@ -118,8 +180,9 @@ runner still carries both controls.
 
 ## What the guarantee is, precisely
 
-The vendored skills are **never loaded as skills, never invokable, and not
-readable whole** by an autonomous session.
+These skills are **never listed to the agent, never invokable, and not readable
+whole** by an autonomous session — whether they arrive via the declared plugin
+or the vendored tree.
 
 That last clause is narrower than it may sound, and the difference matters.
 `dev/plugins/` holds ordinary files inside the repository. Not passing
