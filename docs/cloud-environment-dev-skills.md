@@ -114,3 +114,17 @@ The GitHub Actions autonomous loop does not run in this cloud environment and
 does not inherit its cached plugin state. If a future routine or autonomous
 session is routed to Alpha Lab Dev, it will receive the plugin unless that
 launch path disables `Skill` independently.
+
+## Troubleshooting first-session authentication
+
+`CLAUDE_CONFIG_DIR` redirects the entire Claude configuration, not only plugin
+state. Anthropic-hosted cloud sessions normally receive authentication from the
+session harness, but the first acceptance run must distinguish:
+
+- **Unauthenticated session:** the shared config-directory handoff interfered
+  with the cloud authentication path. Revisit the environment design before
+  changing plugin logic.
+- **Authenticated but skill missing:** setup, cache visibility, or plugin
+  discovery failed. Inspect the setup output and plugin metadata.
+
+Do not copy credentials into the repository or acceptance receipt.

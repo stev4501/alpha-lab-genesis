@@ -4,6 +4,9 @@
 
 set -euo pipefail
 umask 022
+# Fail closed, but never key a guard to environment-dependent decoration such
+# as Unicode status glyphs. A false positive here prevents the environment from
+# starting at all.
 
 : "${CLAUDE_CONFIG_DIR:?Set CLAUDE_CONFIG_DIR in the cloud environment variables}"
 CLOUD_ROOT="/opt/alpha-lab-dev"
@@ -72,8 +75,8 @@ REMOVE_OUTPUT="$(
 REMOVE_STATUS=$?
 set -e
 if (( REMOVE_STATUS != 0 )); then
-  EXPECTED_REMOVE_OUTPUT="✘ Failed to remove marketplace: Marketplace '${MARKETPLACE_NAME}' not found"
-  if [[ "$REMOVE_OUTPUT" != "$EXPECTED_REMOVE_OUTPUT" ]]; then
+  EXPECTED_REMOVE_MESSAGE="Failed to remove marketplace: Marketplace '${MARKETPLACE_NAME}' not found"
+  if [[ "$REMOVE_OUTPUT" != *"$EXPECTED_REMOVE_MESSAGE" ]]; then
     echo "$REMOVE_OUTPUT" >&2
     exit "$REMOVE_STATUS"
   fi

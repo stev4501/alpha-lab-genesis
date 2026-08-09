@@ -43,7 +43,7 @@ class TestCloudEnvironmentSetup(unittest.TestCase):
                         )
                     else:
                         print(
-                            "✘ Failed to remove marketplace: Marketplace "
+                            "× Failed to remove marketplace: Marketplace "
                             "'alpha-lab-pinned' not found",
                             file=sys.stderr,
                         )
