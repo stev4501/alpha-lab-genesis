@@ -6,7 +6,7 @@
   "gitCommitSha": "84fdeffd12f2ee307994d1eb6feb48173b6e0502",
   "claudeVersion": "2.1.226",
   "networkAccess": "Trusted",
-  "setupScriptSha256": "043379e85b13092582ab3f17eef97754652f7cc747e10cc2b02917fa27d6af7b",
+  "setupScriptSha256": "5fad0741b56496a6bff1abeee362a09bc818872de412a34c561e0e26ff621c96",
   "setupScriptDigestMatched": false,
   "firstSessionDirectInvocation": false,
   "firstSessionSubagentInvocation": false,
@@ -16,5 +16,11 @@
   "firstSessionUrl": "",
   "cachedSessionUrl": "",
   "verifiedAt": "",
+  "failedRuns": [
+    {
+      "sessionUrl": "https://claude.ai/code/session_01AkstRaVebA4tHJ8SRgssaq",
+      "reason": "Cloud environment variables were not present in the pre-launch setup process; setup now exports the fixed config path internally."
+    }
+  ],
   "notes": "Configure the cloud environment from docs/cloud-environment-dev-skills.md, then record first-session and cached-session evidence."
 }

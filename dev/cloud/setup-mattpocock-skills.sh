@@ -8,16 +8,20 @@ umask 022
 # as Unicode status glyphs. A false positive here prevents the environment from
 # starting at all.
 
-: "${CLAUDE_CONFIG_DIR:?Set CLAUDE_CONFIG_DIR in the cloud environment variables}"
 CLOUD_ROOT="/opt/alpha-lab-dev"
 
 EXPECTED_CONFIG_DIR="${CLOUD_ROOT}/claude-config"
 MARKETPLACE_DIR="${CLOUD_ROOT}/marketplace"
 MARKETPLACE_FILE="${MARKETPLACE_DIR}/.claude-plugin/marketplace.json"
-if [[ "$CLAUDE_CONFIG_DIR" != "$EXPECTED_CONFIG_DIR" ]]; then
+if [[ -n "${CLAUDE_CONFIG_DIR:-}" && "$CLAUDE_CONFIG_DIR" != "$EXPECTED_CONFIG_DIR" ]]; then
   echo "CLAUDE_CONFIG_DIR must equal ${EXPECTED_CONFIG_DIR}" >&2
   exit 2
 fi
+# Cloud environment variables are applied to the later Claude process but were
+# not present in the pre-launch setup process during acceptance run 1. Export
+# the same fixed path here so setup and runtime converge without relying on
+# lifecycle ordering.
+export CLAUDE_CONFIG_DIR="$EXPECTED_CONFIG_DIR"
 for path in \
   "$CLOUD_ROOT" \
   "$CLAUDE_CONFIG_DIR" \

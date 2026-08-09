@@ -25,8 +25,11 @@ Create a personal cloud environment named **Alpha Lab Dev**:
 
 `CLAUDE_CONFIG_DIR` is required. The setup script runs as root before Claude
 Code launches, while the later Claude process may not share the setup shell's
-`HOME`. A fixed environment variable makes both processes use the same
-cache-stable plugin state.
+`HOME`. Acceptance run 1 showed that environment variables configured in the UI
+were not present in the pre-launch setup process. The script therefore exports
+the fixed path internally for setup, while the configured environment variable
+applies the same path to the later Claude process. Both lifecycle stages converge
+on the same cache-stable plugin state.
 
 The script is self-contained because cloud-environment setup-script ordering
 does not guarantee that the repository is available before setup. It creates a

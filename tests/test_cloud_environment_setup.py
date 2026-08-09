@@ -133,16 +133,40 @@ class TestCloudEnvironmentSetup(unittest.TestCase):
         setup.chmod(setup.stat().st_mode | stat.S_IXUSR)
         return setup
 
-    def test_setup_requires_shared_config_directory(self):
+    def test_setup_uses_fixed_config_when_environment_variable_is_not_injected(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            fake = self.make_fake_claude(root)
+            setup = self.make_setup_copy(root)
+            env = {
+                **{
+                    k: v
+                    for k, v in os.environ.items()
+                    if k != "CLAUDE_CONFIG_DIR"
+                },
+                "CLAUDE_BIN": str(fake),
+                "FAKE_CLAUDE_LOG": str(root / "claude.log"),
+            }
+            result = subprocess.run(
+                ["bash", str(setup)],
+                capture_output=True,
+                text=True,
+                env=env,
+                timeout=30,
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIn("verified", result.stdout)
+
+    def test_mismatched_config_directory_is_rejected(self):
         result = subprocess.run(
             ["bash", str(SETUP)],
             capture_output=True,
             text=True,
-            env={k: v for k, v in os.environ.items() if k != "CLAUDE_CONFIG_DIR"},
+            env={**os.environ, "CLAUDE_CONFIG_DIR": "/tmp/wrong-config"},
             timeout=30,
         )
         self.assertNotEqual(result.returncode, 0)
-        self.assertIn("CLAUDE_CONFIG_DIR", result.stderr)
+        self.assertIn("CLAUDE_CONFIG_DIR must equal", result.stderr)
 
     def test_setup_registers_installs_and_verifies_idempotently(self):
         with tempfile.TemporaryDirectory() as temp:
