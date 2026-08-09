@@ -135,6 +135,24 @@ permission patterns for them do not scope cleanly by path. So the honest
 statement of the boundary is the one above: not loaded, not invokable, not
 readable whole. It is not "the autonomous agent cannot know these files exist".
 
+### The read deny was verified behaviourally, not just asserted
+
+A permission pattern that matches nothing fails silently — the flag is present,
+the tests pass, and the file is readable anyway. Every documented deny example
+uses a `./` prefix (`Read(./secrets/**)`), and the runner's rule is bare
+(`Read(dev/plugins/**)`), so it was checked against the real CLI rather than
+assumed equivalent:
+
+| Invocation | Outcome |
+| :--- | :--- |
+| `--allowedTools Read --disallowedTools "Read(dev/plugins/**)"`, asked to read a vendored `SKILL.md` | refused — "I don't have permission to read that file" |
+| same prompt, deny flag omitted | read it, returned `# Test-Driven Development` |
+
+The bare relative pattern resolves against the project directory; the `./`
+prefix in the documentation examples is a convention, not a requirement. Redo
+this A/B if the pattern is ever edited — `tests/test_dev_plugins.py` can only
+assert the string is present, not that it matches anything.
+
 ## Adding another developer-only plugin
 
 1. Vendor it under `dev/plugins/<name>/` with a `.claude-plugin/plugin.json`.

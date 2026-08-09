@@ -6,6 +6,7 @@ loop/run_session.sh. See docs/dev-only-skills.md.
 """
 
 import json
+import os
 import subprocess
 import unittest
 from pathlib import Path
@@ -138,18 +139,44 @@ class TestDevPluginsStayOutOfAutonomousSessions(unittest.TestCase):
         runner = runner_code()
         self.assertIn('"Read(dev/plugins/**)"', runner)
 
+    def _run_wrapper(self, *args, claude_bin="/bin/false"):
+        """Run bin/dev-session with a stubbed CLAUDE_BIN.
+
+        The stub matters. If the -p guard below were ever removed, an unstubbed
+        run would exec the real CLI and start an agent session inside the test
+        suite — spending money and hanging CI on a test whose whole point is
+        that the wrapper refuses. With the stub the worst case is a wrong exit
+        code, which fails fast. The timeout is a second backstop.
+        """
+        env = {**os.environ, "CLAUDE_BIN": claude_bin}
+        return subprocess.run(
+            [str(ROOT / "bin" / "dev-session"), *args],
+            capture_output=True, text=True, cwd=ROOT, env=env, timeout=30,
+        )
+
     def test_dev_session_refuses_non_interactive(self):
         """bin/dev-session must not be usable to get skills into a headless run."""
-        wrapper = ROOT / "bin" / "dev-session"
-        self.assertTrue(wrapper.is_file(), "bin/dev-session missing")
+        self.assertTrue((ROOT / "bin" / "dev-session").is_file(), "bin/dev-session missing")
         for flag in ("-p", "--print"):
-            result = subprocess.run(
-                [str(wrapper), flag, "noop"],
-                capture_output=True, text=True, cwd=ROOT,
-            )
+            result = self._run_wrapper(flag, "noop")
             with self.subTest(flag=flag):
                 self.assertEqual(result.returncode, 2, f"{flag} was not refused")
                 self.assertIn("refusing non-interactive mode", result.stderr)
+
+    def test_dev_session_still_accepts_interactive_use(self):
+        """The guard must reject -p, not everything.
+
+        Without this, a guard that refused every invocation would pass the test
+        above and quietly break the only supported way to use these skills.
+        /bin/true stands in for the CLI and ignores its arguments, so reaching
+        it at all is the signal.
+        """
+        result = self._run_wrapper("--model", "sonnet", claude_bin="/bin/true")
+        self.assertEqual(
+            result.returncode, 0,
+            f"ordinary invocation was refused: {result.stderr}",
+        )
+        self.assertNotIn("refusing non-interactive mode", result.stderr)
 
 
 class TestVendoredPluginsGrantNoTools(unittest.TestCase):
