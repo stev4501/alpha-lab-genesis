@@ -50,26 +50,36 @@ silently overriding:
 > _Contradicts ADR-0007 (bounded strategy evolution loop) — but worth reopening
 > because…_
 
-## Both targets are human-owned: propose, don't apply
+## `CONTEXT.md` is human-owned; `docs/adr/` is not
 
 The setup skill's default assumption is that `/domain-modeling` creates and
-edits `CONTEXT.md` and ADRs lazily, as terms and decisions get resolved. **That
-does not hold here.**
+edits `CONTEXT.md` and ADRs lazily, as terms and decisions get resolved. That
+holds for ADRs here. It does **not** hold for the glossary.
 
-Under ADR-0009 the human owns the core. `CONTEXT.md` and `docs/adr/` are
-protected in three places at once:
+**`CONTEXT.md` is protected in three places at once:**
 
 | Surface | Effect |
 | :--- | :--- |
 | `.claude/settings.json` deny rules | `Edit`/`Write` on `CONTEXT.md` is refused at the point of the attempt |
-| `loop/validate_session.sh` | a session branch touching them fails the gate |
+| `loop/validate_session.sh` | a session branch touching it fails the gate |
 | `CODEOWNERS` | changes require review by the operator |
 
-So a skill that wants to change the glossary or add an ADR should **write the
-proposal to `core_change_requests/` and stop there**, exactly as
-`loop/prompts/session.md` instructs the autonomous agent. The human applies it.
-An agent that tries to edit these files directly will be blocked, and one that
-works around the block is defeating a deliberate control.
+So a skill that wants to change the glossary should **write the proposal to
+`core_change_requests/` and stop there**, as `loop/prompts/session.md` instructs
+the autonomous agent. The human applies it. An agent that tries to edit it
+directly will be blocked, and one that works around the block is defeating a
+deliberate control.
+
+**`docs/adr/` carries none of those controls.** No deny rule, no entry in the
+validator's protected-path regex, no `CODEOWNERS` line. A skill can write an ADR
+directly. Under ADR-0009 the human owns "generation changes and freeze tags" and
+the sealed core; individual ADRs are not in that enumerated set.
+
+That said, an ADR is a governance artifact here, not a note. Prefer proposing
+one through `core_change_requests/` when it changes how the loop or the evidence
+ladder works, and reserve direct writes for decisions that only record what was
+already agreed. This is a convention, not an enforced control — nothing will
+stop you.
 
 ## If you do add an ADR
 
@@ -77,12 +87,8 @@ Two conventions the templates don't know about:
 
 1. **Numbering is sequential.** `0001`–`0009` exist; the next is `0010`. Match
    the existing filename shape: `NNNN-kebab-case-title.md`.
-2. **`DECISIONS.md` is the append-only index** and is required by
-   `scripts/validate_repository.py`. An ADR added without a corresponding
-   `DECISIONS.md` entry leaves the repository inconsistent, which the next
-   selfcheck may surface — and a failed selfcheck puts the autonomous loop into
-   maintenance mode rather than research mode.
-
-Both files are human-owned, so in practice this means the *proposal* you write
-to `core_change_requests/` should include the ADR body and the `DECISIONS.md`
-line to append, ready for the human to apply together.
+2. **`DECISIONS.md` is the append-only index.** Add a line for the new ADR.
+   `scripts/validate_repository.py` requires `DECISIONS.md` to *exist* — it does
+   **not** check that every ADR is indexed there, so an unindexed ADR will not
+   fail validation. Keeping the index complete is a convention the repository
+   relies on for discoverability, not something enforced for you.

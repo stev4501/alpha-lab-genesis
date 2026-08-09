@@ -5,9 +5,14 @@ by `/mattpocock-skills:setup-matt-pocock-skills`.
 
 | File | Read by |
 | :--- | :--- |
-| `issue-tracker.md` | `to-tickets`, `triage`, `to-spec`, `wayfinder` |
+| `issue-tracker.md` | `ask-matt`, `code-review`, `to-spec`, `to-tickets`, `triage`, `wayfinder` |
 | `triage-labels.md` | `triage` |
-| `domain.md` | `domain-modeling`, `grill-with-docs`, `improve-codebase-architecture`, and any skill exploring the codebase |
+| `domain.md` | any skill exploring the codebase — `ask-matt`, `codebase-design`, `diagnosing-bugs`, `domain-modeling`, `improve-codebase-architecture`, `tdd`, `triage`, `wait-what` |
+
+Consumer lists derived from the installed plugin at version 1.2.3 by grepping
+its skills for references to these files and to `CONTEXT.md`. They may drift on
+a plugin update; the files are read by name, so a stale list here costs nothing
+functionally.
 
 Edit these files directly to change the configuration. Re-running the setup
 skill is only needed to switch issue trackers or start over.
@@ -24,8 +29,11 @@ escalate protected-path work through `core_change_requests/`, record in
 
 ## The `## Agent skills` memory block was deliberately omitted
 
-The setup skill normally adds a summary block to `CLAUDE.md` or `AGENTS.md`.
-Neither file exists here, and neither was created, on purpose.
+The setup skill's step 4 says that when neither `CLAUDE.md` nor `AGENTS.md`
+exists, ask the user which to create — "don't pick for them". That question was
+put to the operator along with the reasoning below, and the answer was
+**neither**: write `docs/agents/` only. This is a recorded decision, not an
+omission.
 
 Both are auto-loaded project memory: Claude Code reads them at the start of
 **every** session in this repository, the autonomous one included. A block
