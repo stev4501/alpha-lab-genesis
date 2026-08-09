@@ -55,6 +55,19 @@ cannot approve its own release.
 This change does not decide issue #7. Until that governance issue is resolved,
 `dev/plugins/` and `bin/` remain agent-space.
 
+## CORE_MANIFEST scope
+
+`scripts/validate_cloud_plugin_acceptance.py` is deliberately not added to
+`CORE_MANIFEST.json`. The manifest's sealed component is EV-0002's scientific
+contract and evaluator chain; this script is pull-request gate tooling and does
+not affect experiment semantics or cross-generation comparability.
+
+The script is still human-owned and protected operationally: ADR-0009 assigns
+`scripts/` to the human-owned core, `loop/agent-settings.json` denies edits to
+that tree, and the protected-path patch retains the reviewed addition. Adding it
+to the sealed component would require a generation bump for bookkeeping that
+does not change the research system.
+
 ## Verification
 
 ```bash
