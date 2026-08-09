@@ -1,12 +1,12 @@
 {
-  "status": "pending",
+  "status": "failed",
   "pluginId": "mattpocock-skills@alpha-lab-pinned",
   "gitCommitSha": "84fdeffd12f2ee307994d1eb6feb48173b6e0502",
-  "claudeVersion": "2.1.226",
-  "cloudEnvironment": "",
-  "sessionUrl": "",
-  "verifiedAt": "",
+  "claudeVersion": "2.1.226 (Claude Code)",
+  "cloudEnvironment": "cloud_default remote environment (container_011HChmbRBCA5jzH6aczDLvW--claude_code_remote--05314d), remote session id cse_01M3fQJKsuAkwKWsdEoDMqRK, no browsable session URL was determinable from within the session",
+  "sessionUrl": "unknown - not exposed to the in-session process; see cloudEnvironment for identifying IDs",
+  "verifiedAt": "2026-08-09T18:38:50Z",
   "directSkillInvocation": false,
   "subagentSkillInvocation": false,
-  "notes": "Start a fresh cloud session on this branch, complete docs/dev-only-skills.md acceptance, then record the evidence here."
+  "notes": "Fresh cloud session started directly on feat/cloud-dev-plugin (not resumed). No repository-plugin trust prompt appeared at startup. `.claude/settings.json` on this branch correctly declares extraKnownMarketplaces.alpha-lab-pinned with mattpocock-skills pinned to sha 84fdeffd12f2ee307994d1eb6feb48173b6e0502, and enabledPlugins marks it true - config is as documented. However automatic installation did not occur: `cat ~/.claude/plugins/installed_plugins.json` returned `{\"version\":2,\"plugins\":{}}` (file present but empty, no mattpocock-skills entry, so no gitCommitSha to check), `~/.claude/plugins/marketplaces` directory does not exist, and `~/.claude/skills/` has no mattpocock-skills entries. The session diagnostics log shows load_plugin_hooks_started/completed with no plugin data, confirming nothing was registered at startup. Direct invocation: `Skill(skill: \"mattpocock-skills:tdd\")` returned `Error: Unknown skill: mattpocock-skills:tdd`. Subagent check: a general-purpose subagent with Skill-tool access independently searched its available skills/plugins listings (ListSkills, ListPlugins, SearchSkills, SearchPlugins) and attempted direct invocation; it found no mattpocock-skills entry anywhere and got the identical `Unknown skill: mattpocock-skills:tdd` error. This reproduces the same negative pattern the doc recorded for the earlier claude-plugins-official attempt: the settings.json marketplace declaration alone does not appear to trigger automatic installation in a real cloud session, matching the doc's own caveat that the local probe 'did not prove that the declaration auto-installs.' The proposed cloud route in docs/dev-only-skills.md is not yet working as designed."
 }
