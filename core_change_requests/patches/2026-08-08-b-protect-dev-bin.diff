@@ -1,0 +1,67 @@
+diff --git a/.claude/settings.json b/.claude/settings.json
+index a361e89..fbca77e 100644
+--- a/.claude/settings.json
++++ b/.claude/settings.json
+@@ -9,6 +9,10 @@
+       "Write(schemas/**)",
+       "Edit(loop/**)",
+       "Write(loop/**)",
++      "Edit(dev/**)",
++      "Write(dev/**)",
++      "Edit(bin/**)",
++      "Write(bin/**)",
+       "Edit(.github/**)",
+       "Write(.github/**)",
+       "Edit(.claude/**)",
+diff --git a/CODEOWNERS b/CODEOWNERS
+index 3ee1be0..6c03921 100644
+--- a/CODEOWNERS
++++ b/CODEOWNERS
+@@ -8,6 +8,8 @@
+ /loop/               @stev4501
+ /.github/            @stev4501
+ /.claude/            @stev4501
++/dev/                @stev4501
++/bin/                @stev4501
+ /CORE_MANIFEST.json  @stev4501
+ /MISSION.md          @stev4501
+ /CONTEXT.md          @stev4501
+diff --git a/loop/prompts/maintenance.md b/loop/prompts/maintenance.md
+index 88ed424..dead5d4 100644
+--- a/loop/prompts/maintenance.md
++++ b/loop/prompts/maintenance.md
+@@ -4,7 +4,7 @@ You are the research agent for alpha-lab-genesis. Session {{SESSION_ID}}, mode:
+ 
+ 1. Read logs/loop/{{SESSION_ID}}/selfcheck.log and HANDOFF.md. Identify exactly which check failed and on what.
+ 
+-2. Diagnose. You may read anything, including evaluator/, scripts/, and schemas/, and you may run the sealed scripts and pytest. You may NOT modify evaluator/, scripts/, schemas/, loop/, .github/, .claude/, CORE_MANIFEST.json, MISSION.md, CONTEXT.md, or CODEOWNERS — if the defect is in a sealed or protected file, your entire output is a precise diagnosis written to core_change_requests/{{SESSION_ID}}.md: symptom, evidence, suspected cause, suggested fix, and what work is blocked until it's fixed.
++2. Diagnose. You may read anything, including evaluator/, scripts/, and schemas/, and you may run the sealed scripts and pytest. You may NOT modify evaluator/, scripts/, schemas/, loop/, dev/, bin/, .github/, .claude/, CORE_MANIFEST.json, MISSION.md, CONTEXT.md, or CODEOWNERS — if the defect is in a sealed or protected file, your entire output is a precise diagnosis written to core_change_requests/{{SESSION_ID}}.md: symptom, evidence, suspected cause, suggested fix, and what work is blocked until it's fixed.
+ 
+ 3. If the defect is in agent-space (STATE.json, HANDOFF.md, backlog/, journals/, HYPOTHESES.md, strategies/, data_adapters/, tests/), fix it, and verify the fix by rerunning the failing check. Never "fix" EXPERIMENTS.jsonl, results/, reviews/, data/snapshots/, data/raw/, or data/provenance/ — evidence is never edited to make a check pass; if evidence and a check disagree, that is a diagnosis for core_change_requests/, not an edit.
+ 
+diff --git a/loop/prompts/session.md b/loop/prompts/session.md
+index ed02f42..eac1a2e 100644
+--- a/loop/prompts/session.md
++++ b/loop/prompts/session.md
+@@ -16,7 +16,7 @@ You are the research agent for alpha-lab-genesis. Session {{SESSION_ID}}, mode:
+ 
+ ## Hard rules
+ 
+-- Never modify evaluator/, scripts/, schemas/, loop/, .github/, .claude/, CORE_MANIFEST.json, MISSION.md, CONTEXT.md, or CODEOWNERS. If something there seems wrong, write a note in core_change_requests/ and move on.
++- Never modify evaluator/, scripts/, schemas/, loop/, dev/, bin/, .github/, .claude/, CORE_MANIFEST.json, MISSION.md, CONTEXT.md, or CODEOWNERS. If something there seems wrong, write a note in core_change_requests/ and move on.
+ - EXPERIMENTS.jsonl is append-only. Never edit or reorder existing lines.
+ - Never modify any existing file under results/, reviews/, data/snapshots/, data/raw/, or data/provenance/. New result directories are permitted only through the sealed scripts.
+ - Six skills (hypothesis-engine, evidence-gate, data-integrity, paper-execution, skill-lifecycle-governance, anti-degradation-triage) are dormant pending ADR-0008's G-0004 follow-up. Do not invoke them. Operative skills: genesis-orchestrator, experiment-loop, memory-handoff.
+diff --git a/loop/validate_session.sh b/loop/validate_session.sh
+index c19d234..adbc213 100755
+--- a/loop/validate_session.sh
++++ b/loop/validate_session.sh
+@@ -31,7 +31,7 @@ for ref in "$BASE" "$BRANCH" "$REFERENCE_TAG"; do
+ done
+ 
+ # 1. Protected paths untouched by the session branch.
+-PROTECTED='^(evaluator/|scripts/|schemas/|loop/|\.github/|\.claude/|CORE_MANIFEST\.json$|MISSION\.md$|CONTEXT\.md$|CODEOWNERS$)'
++PROTECTED='^(evaluator/|scripts/|schemas/|loop/|dev/|bin/|\.github/|\.claude/|CORE_MANIFEST\.json$|MISSION\.md$|CONTEXT\.md$|CODEOWNERS$)'
+ if git diff --name-only "$BASE".."$BRANCH" | grep -qE "$PROTECTED"; then
+   echo "FAIL: protected paths modified:"
+   git diff --name-only "$BASE".."$BRANCH" | grep -E "$PROTECTED" | sed 's/^/  /'

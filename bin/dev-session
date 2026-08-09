@@ -1,0 +1,123 @@
+#!/usr/bin/env bash
+# dev-session — start an interactive Claude Code session with the developer-only
+# skill plugins loaded.
+#
+# These skills are for humans doing development work in this repository. They are
+# deliberately unavailable to the autonomous research sessions started by
+# loop/run_session.sh, which loads no plugin directories at all.
+#
+# Usage:
+#   bin/dev-session                 # interactive session
+#   bin/dev-session /mattpocock-skills:tdd
+#
+# Selected print, background, and cloud flag forms are refused: see the check
+# below. Other claude flags are forwarded verbatim.
+#
+# See docs/dev-only-skills.md for why this is a flag and not a settings entry.
+
+set -euo pipefail
+
+REPO_DIR="$(git -C "$(dirname "${BASH_SOURCE[0]}")" rev-parse --show-toplevel)"
+CLAUDE_BIN="${CLAUDE_BIN:-claude}"
+
+# Every directory listed here is loaded as a plugin for this session only.
+# Add a plugin by dropping it in dev/plugins/<name>/ with a
+# .claude-plugin/plugin.json and adding the path below.
+PLUGIN_DIRS=(
+  "$REPO_DIR/dev/plugins/mattpocock-skills"
+)
+
+# Reject selected print, background, and cloud flag forms.
+#
+# Be precise about what this is: a guardrail against a script casually reaching
+# for this wrapper to get skills into an unattended run. It is NOT a general
+# "interactive only" gate and does not try to be. Claude Code 2.1.226 also
+# treats non-TTY stdout as non-interactive, and the flag surface has proven not
+# to be something anyone can enumerate once and declare closed -- four bypasses
+# were found across three review rounds, including a hidden --remote alias that
+# never appears in `claude --help`. Anything relying on this being airtight is
+# relying on the wrong layer.
+#
+# The layer that actually holds is runner-side: loop/run_session.sh never
+# invokes this wrapper, passes no --plugin-dir at all, and supplies
+# --disable-slash-commands plus --disallowedTools "Skill" "Read(dev/plugins/**)".
+#
+# A developer who genuinely wants headless-with-skills can invoke claude
+# directly with --plugin-dir and own that decision explicitly.
+#
+# Print mode is not the only way to get an unattended session, so the guard
+# covers a class rather than a flag:
+#
+#   --print, -p    print/non-interactive mode. Matching is deliberately wider
+#                  than the literal flags: Claude Code accepts clustered short
+#                  flags, so "-pd" and "-dp" engage --print exactly as "-p"
+#                  does ("claude -pd" errors with "Input must be provided ...
+#                  when using --print", which is the flag working, not
+#                  rejecting the form). An exact-match guard misses every
+#                  cluster. "--print=true" is rejected by the CLI itself as an
+#                  unknown option, but is matched anyway so this wrapper does
+#                  not depend on that staying true.
+#   --bg,
+#   --background   "Start the session as a background agent" -- runs locally,
+#                  so the plugin loads, with nobody watching.
+#   --cloud,
+#   --remote       "Create a cloud session", and its deprecated alias. Refused
+#                  on precaution rather than a demonstrated bypass: whether
+#                  --plugin-dir survives into a cloud container was not
+#                  verified, and creating one to find out has side effects. The
+#                  cost of refusing is a developer calling claude directly; the
+#                  cost of being wrong the other way is skills in an unattended
+#                  session.
+#
+# Deliberately NOT refused: --remote-control and its --rc alias, documented as
+# starting an *interactive* session driven by a human elsewhere; and
+# --input-format, which the CLI documents as only working with --print, already
+# refused above. A blanket TTY requirement is also avoided -- it would break
+# legitimate terminal wrappers without closing any hole these rules miss.
+#
+# NOTE for anyone extending this list: `claude --help` is NOT the authoritative
+# flag surface. --remote and --rc are both recognized and neither appears in
+# help output. To test whether a flag exists without triggering its side
+# effects, exploit the fact that the parser names the FIRST unknown option:
+#
+#     claude <candidate> --print=true
+#
+# If the error names <candidate>, it is not a real flag; if it names
+# --print=true, the candidate was accepted.
+#
+# Long flags are exempted before the cluster test so that --permission-mode and
+# friends are not caught by their leading "p".
+#
+# Scanning deliberately does NOT stop at "--". Claude Code 2.1.226 still acts
+# on --bg after an end-of-options marker: `claude -- --bg` starts a background
+# session rather than treating "--bg" as prompt text. Honouring "--" here would
+# therefore hand back the exact bypass this guard closes. Verified against the
+# real CLI, not assumed from convention -- see the compatibility check in
+# docs/dev-only-skills.md, and redo it when Claude Code is upgraded.
+for arg in "$@"; do
+  case "$arg" in
+    --print|--print=*) ;;                     # print mode, explicit long form
+    --bg|--background|--bg=*|--background=*) ;;   # background agent
+    --cloud|--cloud=*|--remote|--remote=*) ;; # cloud session, and its alias
+    --*)  continue ;;                         # any other long flag is fine
+    -*p*) ;;                                  # short cluster with p: -p, -pd, -dp
+    *)    continue ;;                         # positional argument
+  esac
+  echo "dev-session: refusing $arg (print, background and cloud session flags)." >&2
+  echo "  These plugins are scoped to interactive developer sessions." >&2
+  echo "  To opt out deliberately, call claude directly:" >&2
+  echo "    claude --plugin-dir dev/plugins/mattpocock-skills $arg ..." >&2
+  exit 2
+done
+
+PLUGIN_ARGS=()
+for dir in "${PLUGIN_DIRS[@]}"; do
+  if [[ ! -f "$dir/.claude-plugin/plugin.json" ]]; then
+    echo "dev-session: not a plugin directory (no .claude-plugin/plugin.json): $dir" >&2
+    exit 1
+  fi
+  PLUGIN_ARGS+=(--plugin-dir "$dir")
+done
+
+cd "$REPO_DIR"
+exec "$CLAUDE_BIN" "${PLUGIN_ARGS[@]}" "$@"

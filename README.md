@@ -46,8 +46,14 @@ alpha-lab-genesis/
 ├── logs/                       run and tool logs
 ├── skills/                     core and agent-created skills
 ├── scripts/                    deterministic state-management utilities
+├── dev/plugins/                vendored developer-only skill plugins
+├── bin/                        developer entrypoints
 └── tests/                      repository contract tests
 ```
+
+Skills under `dev/plugins/` are for supervised development only and are never
+loaded by autonomous sessions. Start a session with them using
+`bin/dev-session`; see `docs/dev-only-skills.md`.
 
 ## Source-of-Truth Rules
 
