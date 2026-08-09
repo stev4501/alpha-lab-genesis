@@ -294,8 +294,10 @@ kill <pid>
 ```
 
 Last verified against **2.1.226**: both behaviours confirmed. If a future
-version starts honouring `--`, drop the note above, restore the `break`, and
-reverse `test_dev_session_ignores_end_of_options_marker`.
+version starts honouring `--`, drop the note above, stop `first_refusal` at the
+marker in `bin/dev-session`, and reverse
+`TestRefusalRules.test_end_of_options_marker_does_not_stop_the_scan` in
+`tests/test_dev_session.py`.
 
 ### `claude --help` is not the authoritative flag surface
 
