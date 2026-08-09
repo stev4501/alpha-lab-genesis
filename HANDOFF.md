@@ -33,7 +33,9 @@ sealed, protected, or evidential was touched, and no second unit was started.
   BL-0003 (3), BL-0004 (4), BL-0006 (6).
 - Change requests: `core_change_requests/`. `CCR-0001-g0004-validity-stamps.md`
   is the only one awaiting approval; the other three are applied, withdrawn, or
-  historical.
+  historical. It puts six of the seven sealed/protected paths in scope
+  (`schemas/experiment.schema.json` is the only exclusion, argued in §1.3) and
+  is a specification, not a diff — no implementation exists.
 - Operative skills: `genesis-orchestrator`, `experiment-loop`,
   `memory-handoff`. Six other skills are physically present but dormant
   pending the G-0004 change (see ADR-0008); do not invoke them.
