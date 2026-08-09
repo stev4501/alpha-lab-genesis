@@ -173,26 +173,28 @@ class TestDevPluginsStayOutOfAutonomousSessions(unittest.TestCase):
             result = self._run_wrapper(flag, "noop")
             with self.subTest(flag=flag):
                 self.assertEqual(result.returncode, 2, f"{flag} was not refused")
-                self.assertIn("refusing non-interactive mode", result.stderr)
+                self.assertIn("refusing", result.stderr)
 
-    def test_dev_session_honours_end_of_options(self):
-        """`--` ends option scanning; what follows is positional text.
+    def test_dev_session_ignores_end_of_options_marker(self):
+        """`--` must NOT stop the scan, because Claude Code does not honour it.
 
-        Without this the wrapper refuses `dev-session -- --bg`, where --bg is a
-        prompt the developer wants to talk about rather than a flag. The second
-        case guards the obvious wrong fix: a flag BEFORE the marker must still
-        be caught.
+        This test was originally written the other way round, on the reasonable
+        assumption that `--` means end-of-options. It does not here: against
+        Claude Code 2.1.226, `claude -- --bg` starts a background session
+        rather than treating "--bg" as prompt text. Honouring the marker in the
+        wrapper would hand back exactly the bypass the guard closes.
+
+        A unit test cannot prove that claim — it runs against a stub. See the
+        version-pinned compatibility check in docs/dev-only-skills.md, which
+        must be repeated when Claude Code is upgraded.
         """
-        allowed = self._run_wrapper("--", "--bg", claude_bin="/bin/true")
-        self.assertEqual(
-            allowed.returncode, 0,
-            f"positional text after -- was refused: {allowed.stderr}",
-        )
-        refused = self._run_wrapper("--bg", "--", "x")
-        self.assertEqual(
-            refused.returncode, 2,
-            "a flag before -- must still be refused",
-        )
+        for args in (("--", "--bg"), ("--bg", "--", "x"), ("--", "-p", "x")):
+            result = self._run_wrapper(*args)
+            with self.subTest(args=args):
+                self.assertEqual(
+                    result.returncode, 2,
+                    f"{args} was not refused; -- must not end the scan",
+                )
 
     def test_dev_session_still_accepts_interactive_use(self):
         """The guard must reject -p, not everything.
@@ -210,6 +212,7 @@ class TestDevPluginsStayOutOfAutonomousSessions(unittest.TestCase):
             ("--remote-control",),           # documented as interactive
             ("--rc",),                       # its alias, likewise
             ("-w",),
+            ("--", "some prompt text"),      # -- itself is not a rejected form
             ("explain --bg and -p",),        # positional mentioning flags
         ):
             result = self._run_wrapper(*args, claude_bin="/bin/true")
@@ -218,7 +221,7 @@ class TestDevPluginsStayOutOfAutonomousSessions(unittest.TestCase):
                     result.returncode, 0,
                     f"ordinary invocation {args} was refused: {result.stderr}",
                 )
-                self.assertNotIn("refusing non-interactive mode", result.stderr)
+                self.assertNotIn("refusing", result.stderr)
 
 
 class TestVendoredPluginsGrantNoTools(unittest.TestCase):

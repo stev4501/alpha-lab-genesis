@@ -10,8 +10,8 @@
 #   bin/dev-session                 # interactive session
 #   bin/dev-session /mattpocock-skills:tdd
 #
-# Non-interactive mode is refused: see the -p check below. Other claude flags
-# are forwarded verbatim.
+# Selected print, background, and cloud flag forms are refused: see the check
+# below. Other claude flags are forwarded verbatim.
 #
 # See docs/dev-only-skills.md for why this is a flag and not a settings entry.
 
@@ -27,10 +27,21 @@ PLUGIN_DIRS=(
   "$REPO_DIR/dev/plugins/mattpocock-skills"
 )
 
-# Refuse non-interactive mode. These skills are for a human at a keyboard; the
-# whole arrangement exists to keep them away from unattended agents. Nothing
-# stops a future script from reaching for this wrapper to get skills into a
-# headless run, so the wrapper refuses rather than relying on nobody trying.
+# Reject selected print, background, and cloud flag forms.
+#
+# Be precise about what this is: a guardrail against a script casually reaching
+# for this wrapper to get skills into an unattended run. It is NOT a general
+# "interactive only" gate and does not try to be. Claude Code 2.1.226 also
+# treats non-TTY stdout as non-interactive, and the flag surface has proven not
+# to be something anyone can enumerate once and declare closed -- four bypasses
+# were found across three review rounds, including a hidden --remote alias that
+# never appears in `claude --help`. Anything relying on this being airtight is
+# relying on the wrong layer.
+#
+# The layer that actually holds is runner-side: loop/run_session.sh never
+# invokes this wrapper, passes no --plugin-dir at all, and supplies
+# --disable-slash-commands plus --disallowedTools "Skill" "Read(dev/plugins/**)".
+#
 # A developer who genuinely wants headless-with-skills can invoke claude
 # directly with --plugin-dir and own that decision explicitly.
 #
@@ -76,9 +87,15 @@ PLUGIN_DIRS=(
 #
 # Long flags are exempted before the cluster test so that --permission-mode and
 # friends are not caught by their leading "p".
+#
+# Scanning deliberately does NOT stop at "--". Claude Code 2.1.226 still acts
+# on --bg after an end-of-options marker: `claude -- --bg` starts a background
+# session rather than treating "--bg" as prompt text. Honouring "--" here would
+# therefore hand back the exact bypass this guard closes. Verified against the
+# real CLI, not assumed from convention -- see the compatibility check in
+# docs/dev-only-skills.md, and redo it when Claude Code is upgraded.
 for arg in "$@"; do
   case "$arg" in
-    --) break ;;            # end of options; everything after is positional
     --print|--print=*) ;;                     # print mode, explicit long form
     --bg|--background|--bg=*|--background=*) ;;   # background agent
     --cloud|--cloud=*|--remote|--remote=*) ;; # cloud session, and its alias
@@ -86,7 +103,7 @@ for arg in "$@"; do
     -*p*) ;;                                  # short cluster with p: -p, -pd, -dp
     *)    continue ;;                         # positional argument
   esac
-  echo "dev-session: refusing non-interactive mode ($arg)." >&2
+  echo "dev-session: refusing $arg (print, background and cloud session flags)." >&2
   echo "  These plugins are scoped to interactive developer sessions." >&2
   echo "  To opt out deliberately, call claude directly:" >&2
   echo "    claude --plugin-dir dev/plugins/mattpocock-skills $arg ..." >&2

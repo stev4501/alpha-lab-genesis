@@ -153,10 +153,10 @@ prefix in the documentation examples is a convention, not a requirement. Redo
 this A/B if the pattern is ever edited — `tests/test_dev_plugins.py` can only
 assert the string is present, not that it matches anything.
 
-## The wrapper refuses non-interactive mode
+## What the wrapper refuses
 
-`bin/dev-session` exits 2 on any argument that would put the session into
-`--print` mode. The guard matches wider than the literal flags, and the reason
+`bin/dev-session` exits 2 on selected explicit print, background, and cloud
+flag forms. The guard matches wider than the literal flags, and the reason
 is worth recording: Claude Code accepts **clustered short flags**, so `-pd` and
 `-dp` engage `--print` exactly as `-p` does. An exact-match guard on `-p` and
 `--print` looks correct and misses every cluster — which is what the first
@@ -174,14 +174,59 @@ so the guard covers a class rather than a flag.
 | `--cloud`, `--remote` | refused | cloud session and its deprecated alias; precaution, see below |
 | `--remote-control`, `--rc` | passed | documented as starting an *interactive* session, driven by a human elsewhere |
 | `--permission-mode`, `--model`, `-d`, `-c`, `-w`, `--add-dir`, `--agent` | passed | ordinary interactive flags |
-| anything after `--` | passed | end-of-options marker; positional text |
+| `--bg` etc. **after** `--` | refused | Claude Code does not honour the marker here — see below |
 | a positional prompt mentioning `-p` or `--bg` | passed | not a flag |
 
 Long flags are exempted before the cluster test, so `--permission-mode` is not
 caught by its leading `p`. `--input-format` needs no rule: the CLI documents it
-as only working with `--print`, which is already refused. Scanning stops at the
-`--` end-of-options marker, so `dev-session -- --bg` treats `--bg` as prompt
-text — but a flag *before* the marker is still caught.
+as only working with `--print`, which is already refused.
+
+### `--` is not honoured, because Claude Code does not honour it
+
+Scanning deliberately continues past the `--` end-of-options marker. This looks
+wrong — conventionally `--` means "everything after this is positional" — and an
+earlier revision of this wrapper implemented exactly that, on that assumption.
+
+The assumption is false here. Against Claude Code 2.1.226:
+
+```bash
+claude --plugin-dir "$PWD/dev/plugins/mattpocock-skills" -- --bg
+# → Starting background service…
+# → backgrounded · <id>
+```
+
+`--bg` is still acted on after the marker, so a wrapper that stopped scanning at
+`--` would hand back the exact bypass the guard exists to close. The cost is
+that `dev-session -- --bg` refuses a prompt that merely mentions `--bg`; a
+developer who wants to discuss the flag can quote it differently, and that is
+the cheaper side of the trade.
+
+### Version-pinned compatibility check
+
+The unit tests run against a stubbed `CLAUDE_BIN` and therefore **cannot** prove
+anything about Claude's parser. Two behaviours the wrapper depends on are
+properties of the CLI, not of this repository, and need re-checking whenever
+Claude Code is upgraded:
+
+```bash
+# 1. Does `--` still fail to end option parsing?  (expect: background session starts)
+npx -y @anthropic-ai/claude-code@<version> \
+  --plugin-dir "$PWD/dev/plugins/mattpocock-skills" -- --bg
+
+# 2. Do clustered short flags still engage --print?  (expect: the --print prompt error)
+npx -y @anthropic-ai/claude-code@<version> -pd "say ok"
+```
+
+Check 1 **starts a real background session**. Stop it immediately:
+
+```bash
+claude agents --json          # find the id and pid
+kill <pid>
+```
+
+Last verified against **2.1.226**: both behaviours confirmed. If a future
+version starts honouring `--`, drop the note above, restore the `break`, and
+reverse `test_dev_session_ignores_end_of_options_marker`.
 
 ### `claude --help` is not the authoritative flag surface
 
@@ -218,9 +263,20 @@ refused, and that ordinary invocation still works. A guard that refused
 everything would otherwise pass a refusal-only test while breaking the only
 supported way to use these skills.
 
-This is a guardrail, not a boundary. A developer who wants headless-with-skills
-can call `claude --plugin-dir …` directly, and should. What it stops is a script
-reaching for this wrapper and getting skills into an unattended run by accident.
+This is a guardrail, not a boundary, and the distinction is load-bearing. The
+wrapper rejects **selected explicit print, background, and cloud flag forms** —
+it is not a general "interactive only" gate and does not claim to be. Claude
+Code 2.1.226 also treats non-TTY stdout as non-interactive, and the flag surface
+has not proven enumerable: four bypasses were found across three review rounds,
+including a `--remote` alias absent from `claude --help`. TTY enforcement,
+`ultrareview`-style workflows, and exhaustive alias discovery are accepted
+trade-offs here, not solved problems.
+
+What actually keeps these skills away from the autonomous loop is runner-side
+and does not involve this wrapper at all: `loop/run_session.sh` never invokes
+it, passes no `--plugin-dir`, and supplies `--disable-slash-commands` and
+`--disallowedTools "Skill" "Read(dev/plugins/**)"`. No wrapper bypass reaches
+the loop, because the loop never calls the wrapper.
 
 ## Adding another developer-only plugin
 
