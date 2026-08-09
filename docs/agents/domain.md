@@ -60,7 +60,7 @@ holds for ADRs here. It does **not** hold for the glossary.
 
 | Surface | Effect |
 | :--- | :--- |
-| `.claude/settings.json` deny rules | `Edit`/`Write` on `CONTEXT.md` is refused at the point of the attempt |
+| `loop/agent-settings.json` deny rules | `Edit`/`Write` on `CONTEXT.md` is refused at the point of the attempt, in the sessions `loop/run_session.sh` launches |
 | `loop/validate_session.sh` | a session branch touching it fails the gate |
 
 `CODEOWNERS` also lists it, but that is not a third layer. ADR-0009 is explicit:
@@ -71,9 +71,16 @@ admin — not on GitHub review mechanics.
 
 So a skill that wants to change the glossary should **write the proposal to
 `core_change_requests/` and stop there**, as `loop/prompts/session.md` instructs
-the autonomous agent. The human applies it. An agent that tries to edit it
-directly will be blocked, and one that works around the block is defeating a
-deliberate control.
+the autonomous agent. The human applies it. In an autonomous session an agent
+that tries to edit it directly will be blocked, and one that works around the
+block is defeating a deliberate control.
+
+Since BL-0006 (2026-08-09) a **supervised** session is not blocked at the point
+of the attempt — the deny rules that own the core moved to the runner, and the
+human in the session is the control. The convention is unchanged and still
+binding: propose through `core_change_requests/` rather than editing, unless the
+operator in the session directs the edit directly. What used to be refused by a
+rule is now refused by you.
 
 **`docs/adr/` carries none of those controls.** No deny rule, no entry in the
 validator's protected-path regex, no `CODEOWNERS` line. A skill can write an ADR

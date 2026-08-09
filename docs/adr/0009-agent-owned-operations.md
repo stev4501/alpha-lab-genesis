@@ -61,11 +61,23 @@ deleted; tags matching `pre-*` cannot be moved or deleted. These bound the
 irreversible failure and anchor the sealed-hash root of trust. They stay.
 
 **Runner-side, binding on the unattended agent:** the `--allowedTools`
-allowlist, the `.claude/settings.json` deny rules, and the validator executed
-from `main`'s copy rather than the branch under test. These are the operating
-gate for session output, and they are self-policed in ADR-0008's sense: code
-the session's runner executes. That is no longer an accepted MVP deficiency
-awaiting closure. It is the design.
+allowlist, the deny rules in `loop/agent-settings.json`, and the validator
+executed from `main`'s copy rather than the branch under test. These are the
+operating gate for session output, and they are self-policed in ADR-0008's
+sense: code the session's runner executes. That is no longer an accepted MVP
+deficiency awaiting closure. It is the design.
+
+**Amended 2026-08-09 (BL-0006).** Those deny rules were originally written in
+`.claude/settings.json`, which is project-wide: it bound every Claude Code
+session opened in this repository, supervised ones included, so the supervised
+path for repairing the loop was strictly more awkward than the unsupervised
+path for running it. The operator scoped them to the runner.
+`.claude/settings.json` now keeps only what should bind every session
+regardless of who is watching — evidence immutability and the `main`/history
+guardrails — and `loop/run_session.sh` passes the core-ownership rules to the
+unattended agent with `--settings`, refusing to start if that file is missing
+or does not parse. Who owns the core did not change; the layer that expresses
+it did. See `journals/2026-08-09-deny-rule-scoping.md`.
 
 **Convention, binding on nobody:** `CODEOWNERS` remains a statement of
 intent, permanently, since no required-review setting will ever activate it.
