@@ -1,0 +1,274 @@
+diff --git a/.github/workflows/prune-session-branches.yml b/.github/workflows/prune-session-branches.yml
+new file mode 100644
+index 0000000..b852724
+--- /dev/null
++++ b/.github/workflows/prune-session-branches.yml
+@@ -0,0 +1,56 @@
++name: prune-session-branches
++
++# Manual trigger only for now. The schedule below is intentionally left
++# commented, exactly as session.yml was: a human enables it after
++# workflow_dispatch runs prove the rules select the branches they are meant to
++# and nothing else.
++#
++# The dispatch input defaults to a dry run. On the schedule event `inputs` is
++# empty, so the guarded expression below evaluates to false and a scheduled run
++# deletes for real — deliberate, and the reason to leave the schedule off until
++# a dry run has been read.
++on:
++  workflow_dispatch:
++    inputs:
++      dry_run:
++        description: "List what would be deleted without deleting it"
++        type: boolean
++        default: true
++
++  # To enable weekly pruning, uncomment the two lines below. They belong HERE,
++  # nested under this same `on:` mapping. A second top-level `on:` key does not
++  # merge with this one — YAML keeps the last, which would silently drop the
++  # workflow_dispatch trigger above and leave a scheduled pruner with no manual
++  # trigger and no dry-run default.
++  # schedule:
++  #   - cron: "17 4 * * 0"      # Sundays 04:17 UTC, well clear of any session
++
++concurrency:
++  group: prune-session-branches   # NOT the research-session group: pruning must
++  cancel-in-progress: false       # never queue behind a 110-minute session
++
++permissions:
++  contents: write                 # required to delete a remote branch
++
++jobs:
++  prune:
++    runs-on: ubuntu-latest
++    timeout-minutes: 10
++    steps:
++      - uses: actions/checkout@v4
++        with:
++          fetch-depth: 0
++          # fetch-depth: 0 is required: the script counts each failed/<id>
++          # branch's commits against main and reads journals/<id>.md out of
++          # origin/main, neither of which a shallow clone can answer.
++
++      - name: Prune failed session branches
++        env:
++          DRY_RUN: ${{ inputs.dry_run == true }}
++          EMPTY_RETENTION_DAYS: "7"
++          # 0 = never delete a failed branch that carries commits main lacks.
++          # Raising this opts into deleting rejected work and contradicts
++          # README.md's "Failed and discarded experiments are retained" until
++          # that rule is amended.
++          WORK_RETENTION_DAYS: "0"
++        run: bash loop/prune_branches.sh
+diff --git a/loop/prune_branches.sh b/loop/prune_branches.sh
+new file mode 100755
+index 0000000..5a99e4b
+--- /dev/null
++++ b/loop/prune_branches.sh
+@@ -0,0 +1,206 @@
++#!/usr/bin/env bash
++# prune_branches.sh — retention policy for the branches run_session.sh leaves
++# on the remote. Lives in loop/ (protected). The session agent never edits this
++# file, never invokes it, and no session depends on it having run.
++#
++# Scope, deliberately narrow. run_session.sh can leave three kinds of branch:
++#
++#   session/<id>   local to the runner, never pushed on the success path.
++#                  Nothing to prune; it dies with the ephemeral runner.
++#   failed/<id>    pushed when validation fails, so the rejected work survives
++#                  for forensics while only journal+handoff reach main.
++#                  ADR-0008 exit criterion 2 requires this branch to exist.
++#                  THIS is the only thing this script may delete.
++#   unmerged/<id>  pushed when the post-merge push to main is rejected. It
++#                  exists precisely because a validated session's work never
++#                  reached main, so it is the ONLY copy of that work. Never
++#                  deleted here, at any age, by any rule.
++#
++# Everything not matching refs/heads/failed/* is out of scope by construction:
++# the remote is enumerated with that refspec and nothing else.
++#
++# DEFAULT POSTURE: only branches carrying no commits main lacks are deleted.
++# README.md's source-of-truth rules say failed and discarded experiments are
++# retained, and a work-bearing failed/<id> is the only copy of the artifacts a
++# session produced — its journal on main records what happened, not what was
++# made. So WORK_RETENTION_DAYS defaults to 0, meaning never. Setting it to a
++# positive number opts into deleting rejected work and needs that README rule
++# amended first.
++
++set -euo pipefail
++
++DRY_RUN="${DRY_RUN:-true}"
++EMPTY_RETENTION_DAYS="${EMPTY_RETENTION_DAYS:-7}"
++WORK_RETENTION_DAYS="${WORK_RETENTION_DAYS:-0}"   # 0 = retain work-bearing forever
++
++cd "${REPO_DIR:-$(git rev-parse --show-toplevel)}"
++
++# Raising this is a policy act, not a tuning knob, so it says so out loud in
++# the run log rather than only in a comment nobody reads at 04:17 on a Sunday.
++if [[ "$WORK_RETENTION_DAYS" -gt 0 ]]; then
++  echo "WARNING: WORK_RETENTION_DAYS=${WORK_RETENTION_DAYS} deletes failed branches that carry" >&2
++  echo "         rejected work. README.md's source-of-truth rules retain failed and discarded" >&2
++  echo "         experiments; this run assumes that rule has been amended." >&2
++fi
++
++# Age comes from the session id in the branch name, not from the tip commit's
++# date. A failed branch that produced no commits points at whatever main
++# pointed at when the session started, so its tip date is main's date and can
++# be arbitrarily old — dating by tip would delete a branch minutes after a
++# session created it. A name that does not parse is never deleted.
++session_epoch() {
++  local id="$1"
++  [[ "$id" =~ ^([0-9]{4})-([0-9]{2})-([0-9]{2})-([0-9]{2})([0-9]{2})$ ]] || return 1
++  local stamp="${BASH_REMATCH[1]}-${BASH_REMATCH[2]}-${BASH_REMATCH[3]} ${BASH_REMATCH[4]}:${BASH_REMATCH[5]}:00"
++  date -u -d "$stamp UTC" +%s 2>/dev/null \
++    || date -u -j -f "%Y-%m-%d %H:%M:%S" "$stamp" +%s 2>/dev/null
++}
++
++kept=0
++removed=0
++failures=0
++keep() { echo "KEEP   $1 — $2"; kept=$((kept + 1)); }
++
++PUSH_ERR="$(mktemp)"
++trap 'rm -f "$PUSH_ERR"' EXIT
++
++# Enumerate BEFORE fetching, and treat the enumerated sha as the authority for
++# the rest of the run. Reading state from a tracking ref instead would mean
++# judging one commit and deleting whatever the name points at later.
++#
++# The listing is captured through a command substitution, not piped straight
++# into `mapfile < <(...)`. That form reports mapfile's status, never the
++# producer's, so a failed ls-remote — no network, dead credential — would leave
++# an empty array and the run would report a tidy "0 deleted, 0 kept" and exit
++# 0. An enumeration that did not happen must not look like a remote with
++# nothing on it. (A successful listing that is genuinely empty is fine, and
++# still exits 0.)
++if ! remote_listing="$(git ls-remote --heads origin "refs/heads/failed/*")"; then
++  echo "FATAL: could not enumerate refs/heads/failed/* on origin; nothing was evaluated." >&2
++  exit 1
++fi
++mapfile -t REMOTE_REFS <<< "$remote_listing"
++
++git fetch -q origin main
++git fetch -q origin "+refs/heads/failed/*:refs/remotes/origin/failed/*"
++
++NOW="$(date -u +%s)"
++
++for line in "${REMOTE_REFS[@]}"; do
++  [[ -n "$line" ]] || continue
++  sha="${line%%$'\t'*}"
++  ref="${line#*$'\t'}"
++  branch="${ref#refs/heads/}"
++  id="${branch#failed/}"
++
++  # The enumerated commit must be in hand before anything is judged by it. A
++  # branch force-updated between the enumeration and the fetch leaves us
++  # holding a sha we cannot read; so does a fetch that raced a new branch.
++  # Either way this is a keep, not an abort — without this guard the missing
++  # object makes rev-list fail and set -e takes down the whole job.
++  if ! git cat-file -e "${sha}^{commit}" 2>/dev/null; then
++    keep "$branch" "commit ${sha:0:8} not present locally; state moved under us"
++    continue
++  fi
++
++  if ! created="$(session_epoch "$id")"; then
++    keep "$branch" "name carries no parseable session id"
++    continue
++  fi
++  age_days=$(( (NOW - created) / 86400 ))
++
++  # Commits this branch has that main does not. Zero means every commit on it
++  # is already on main: the branch is a bare pointer holding no forensic
++  # record, which is what a session that died before producing a commit leaves.
++  unique="$(git rev-list --count "origin/main..${sha}")"
++
++  if [[ "$unique" -eq 0 ]]; then
++    limit="$EMPTY_RETENTION_DAYS"
++    what="no unique commits"
++  else
++    limit="$WORK_RETENTION_DAYS"
++    what="${unique} unique commit(s)"
++    if [[ "$limit" -le 0 ]]; then
++      keep "$branch" "${what}; WORK_RETENTION_DAYS=0 retains rejected work indefinitely"
++      continue
++    fi
++  fi
++
++  if [[ "$age_days" -lt "$limit" ]]; then
++    keep "$branch" "${what}, ${age_days}d old, retained ${limit}d"
++    continue
++  fi
++
++  # A branch carrying real commits is deleted only once main demonstrably
++  # holds that session's narrative. The salvage path pushes failed/<id> BEFORE
++  # committing the journal to main, so a salvage push that was itself rejected
++  # leaves the branch as the only record of the session. Absent journal =>
++  # keep forever and let a human decide.
++  if [[ "$unique" -ne 0 ]] && ! git cat-file -e "origin/main:journals/${id}.md" 2>/dev/null; then
++    keep "$branch" "${what}, ${age_days}d old, but journals/${id}.md is absent from main"
++    continue
++  fi
++
++  if [[ "$DRY_RUN" == "true" ]]; then
++    echo "WOULD  ${branch} — ${what}, ${age_days}d old, past ${limit}d"
++    removed=$((removed + 1))
++    continue
++  fi
++
++  # Delete under a lease on the exact commit that was judged. If the branch
++  # moved since enumeration, the remote refuses and the work survives to be
++  # re-evaluated — including its journal check — on the next run.
++  #
++  # A lost lease is the ONLY failure treated as benign. Everything else a push
++  # can fail on — expired credentials, a revoked token, branch protection, DNS,
++  # a 500 from the remote — must not be laundered into "the branch moved". A
++  # pruner that reports a clean run while silently deleting nothing is worse
++  # than one that fails, because nobody goes looking.
++  #
++  # Which of the two it was is decided from the remote's state, not from the
++  # text of the error: git's wording is not an interface, and a hook is free to
++  # print anything it likes in its rejection, including the phrase we would be
++  # matching on. LC_ALL=C is here only so the diagnostics land in the log in a
++  # predictable language; nothing branches on what it says.
++  if LC_ALL=C git push -q origin \
++       --force-with-lease="refs/heads/${branch}:${sha}" \
++       --delete "refs/heads/${branch}" 2>"$PUSH_ERR"; then
++    echo "DELETE ${branch} — ${what}, ${age_days}d old, past ${limit}d"
++    removed=$((removed + 1))
++    continue
++  fi
++
++  # Ask the remote what the ref is now. Unchanged means the push failed for a
++  # reason of its own and the branch is still there to be dealt with; moved or
++  # gone means the race the lease exists to catch. A re-query that fails leaves
++  # the outcome unknown, and unknown is an error, not a keep.
++  if ! current="$(LC_ALL=C git ls-remote --heads origin "refs/heads/${branch}" 2>>"$PUSH_ERR")"; then
++    echo "ERROR  ${branch} — deletion failed and the remote could not be re-queried:" >&2
++    sed 's/^/       /' "$PUSH_ERR" >&2
++    failures=$((failures + 1))
++    continue
++  fi
++  current_sha="${current%%$'\t'*}"
++
++  if [[ -z "$current" ]]; then
++    keep "$branch" "already gone from the remote; another actor deleted it"
++  elif [[ "$current_sha" != "$sha" ]]; then
++    keep "$branch" "moved since enumeration (${sha:0:8} -> ${current_sha:0:8}); lease refused"
++  else
++    echo "ERROR  ${branch} — deletion failed and the branch still points at ${sha:0:8}," >&2
++    echo "       so this was not a lease race:" >&2
++    sed 's/^/       /' "$PUSH_ERR" >&2
++    failures=$((failures + 1))
++  fi
++done
++
++if [[ "$DRY_RUN" == "true" ]]; then
++  echo "Dry run: ${removed} branch(es) would be deleted, ${kept} kept."
++else
++  echo "Deleted ${removed} branch(es), kept ${kept}."
++fi
++
++if [[ "$failures" -ne 0 ]]; then
++  echo "FATAL: ${failures} deletion(s) failed for reasons other than a stale lease." >&2
++  exit 1
++fi
