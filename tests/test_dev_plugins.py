@@ -155,9 +155,16 @@ class TestDevPluginsStayOutOfAutonomousSessions(unittest.TestCase):
         )
 
     def test_dev_session_refuses_non_interactive(self):
-        """bin/dev-session must not be usable to get skills into a headless run."""
+        """bin/dev-session must not be usable to get skills into a headless run.
+
+        The clustered forms are the ones that matter. Claude Code accepts
+        clustered short flags, so `-pd` and `-dp` engage --print exactly as `-p`
+        does; an exact-match guard looks correct and misses every cluster.
+        `--print=true` is currently rejected by the CLI as an unknown option,
+        and is covered here so the wrapper does not depend on that.
+        """
         self.assertTrue((ROOT / "bin" / "dev-session").is_file(), "bin/dev-session missing")
-        for flag in ("-p", "--print"):
+        for flag in ("-p", "--print", "--print=true", "-pd", "-dp", "-pv"):
             result = self._run_wrapper(flag, "noop")
             with self.subTest(flag=flag):
                 self.assertEqual(result.returncode, 2, f"{flag} was not refused")
@@ -171,12 +178,20 @@ class TestDevPluginsStayOutOfAutonomousSessions(unittest.TestCase):
         /bin/true stands in for the CLI and ignores its arguments, so reaching
         it at all is the signal.
         """
-        result = self._run_wrapper("--model", "sonnet", claude_bin="/bin/true")
-        self.assertEqual(
-            result.returncode, 0,
-            f"ordinary invocation was refused: {result.stderr}",
-        )
-        self.assertNotIn("refusing non-interactive mode", result.stderr)
+        for args in (
+            ("--model", "sonnet"),
+            ("--permission-mode", "plan"),   # long flag starting with p
+            ("-d",),                         # short flag without p
+            ("-c",),
+            ("explain the -p flag",),        # positional mentioning -p
+        ):
+            result = self._run_wrapper(*args, claude_bin="/bin/true")
+            with self.subTest(args=args):
+                self.assertEqual(
+                    result.returncode, 0,
+                    f"ordinary invocation {args} was refused: {result.stderr}",
+                )
+                self.assertNotIn("refusing non-interactive mode", result.stderr)
 
 
 class TestVendoredPluginsGrantNoTools(unittest.TestCase):

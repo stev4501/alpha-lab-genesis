@@ -198,22 +198,33 @@ guardrail job indefinitely now that no server-side boundary is coming. The
 distinction that note draws — guardrail versus boundary — is the same one at
 work here, applied to a different flag.
 
-## How to apply
+## Verifying what is applied
+
+Part A is applied; its patch file is a record, not a step. Do not run
+`git apply` on it — it will fail, because the tree already contains the change.
+To confirm the tree matches the record:
 
 ```bash
-git apply core_change_requests/patches/2026-08-08-a-skill-backstop.diff
-# optional — self-contained, no manual settings.json edit needed:
-git apply core_change_requests/patches/2026-08-08-b-protect-dev-bin.diff
-
-bash -n loop/run_session.sh && bash -n loop/validate_session.sh
+git apply --check --reverse core_change_requests/patches/2026-08-08-a-skill-backstop.diff
+bash -n loop/run_session.sh && bash -n bin/dev-session
 python scripts/validate_repository.py
 python -m unittest discover -s tests
 ```
 
-Part A is already applied; its patch file is a record, not a step. Part B
-applies exactly against current `main`.
+Part B is **not** applied and must not be until ADR-0009 is amended (see above).
+When that decision is recorded, it applies with:
 
-## What is blocked until this is applied
+```bash
+git apply core_change_requests/patches/2026-08-08-b-protect-dev-bin.diff
+```
 
-Nothing. Part A hardens a layer; Part B narrows write access. The
-developer-only arrangement works as delivered.
+The permission rule `Read(dev/plugins/**)` cannot be checked by any of the
+commands above — a pattern that matches nothing passes every one of them. It
+was verified by A/B against the live CLI; `docs/dev-only-skills.md` records the
+method and result, and that A/B should be redone if the pattern is ever edited.
+
+## Status
+
+Part A is applied and enforced by tests. Part B is blocked on a governance
+decision, not on any technical work. Nothing else in this request is
+outstanding, and the developer-only arrangement works as delivered.

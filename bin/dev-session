@@ -33,16 +33,29 @@ PLUGIN_DIRS=(
 # headless run, so the wrapper refuses rather than relying on nobody trying.
 # A developer who genuinely wants headless-with-skills can invoke claude
 # directly with --plugin-dir and own that decision explicitly.
+#
+# Matching is deliberately wider than the literal "-p" and "--print". Claude
+# Code accepts clustered short flags, so "-pd" and "-dp" both engage --print
+# ("claude -pd" errors with "Input must be provided ... when using --print",
+# which is the flag doing its job, not rejecting the form). An exact-match
+# guard would miss every cluster. "--print=true" is rejected by the CLI itself
+# as an unknown option, but is matched here anyway so the wrapper does not
+# depend on that staying true.
+#
+# Long flags are exempted before the cluster test so that --permission-mode and
+# friends are not caught by their leading "p".
 for arg in "$@"; do
   case "$arg" in
-    -p|--print)
-      echo "dev-session: refusing non-interactive mode ($arg)." >&2
-      echo "  These plugins are scoped to interactive developer sessions." >&2
-      echo "  To opt out deliberately, call claude directly:" >&2
-      echo "    claude --plugin-dir dev/plugins/mattpocock-skills $arg ..." >&2
-      exit 2
-      ;;
+    --print|--print=*) ;;   # explicit long form
+    --*)  continue ;;       # any other long flag is fine
+    -*p*) ;;                # short-flag cluster containing p: -p, -pd, -dp
+    *)    continue ;;       # positional argument
   esac
+  echo "dev-session: refusing non-interactive mode ($arg)." >&2
+  echo "  These plugins are scoped to interactive developer sessions." >&2
+  echo "  To opt out deliberately, call claude directly:" >&2
+  echo "    claude --plugin-dir dev/plugins/mattpocock-skills $arg ..." >&2
+  exit 2
 done
 
 PLUGIN_ARGS=()

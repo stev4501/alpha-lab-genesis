@@ -153,6 +153,33 @@ prefix in the documentation examples is a convention, not a requirement. Redo
 this A/B if the pattern is ever edited — `tests/test_dev_plugins.py` can only
 assert the string is present, not that it matches anything.
 
+## The wrapper refuses non-interactive mode
+
+`bin/dev-session` exits 2 on any argument that would put the session into
+`--print` mode. The guard matches wider than the literal flags, and the reason
+is worth recording: Claude Code accepts **clustered short flags**, so `-pd` and
+`-dp` engage `--print` exactly as `-p` does. An exact-match guard on `-p` and
+`--print` looks correct and misses every cluster — which is what the first
+version of this wrapper did.
+
+| Form | Wrapper |
+| :--- | :--- |
+| `-p`, `--print` | refused |
+| `-pd`, `-dp`, `-pv` (clusters) | refused |
+| `--print=true` | refused (the CLI also rejects it as an unknown option) |
+| `--permission-mode`, `--model`, `-d`, `-c` | passed through |
+| a positional prompt mentioning `-p` | passed through |
+
+Long flags are exempted before the cluster test, so `--permission-mode` is not
+caught by its leading `p`. `tests/test_dev_plugins.py` covers both directions —
+that the clustered forms are refused, and that ordinary invocation still works.
+A guard that refused everything would otherwise pass a refusal-only test while
+breaking the only supported way to use these skills.
+
+This is a guardrail, not a boundary. A developer who wants headless-with-skills
+can call `claude --plugin-dir …` directly, and should. What it stops is a script
+reaching for this wrapper and getting skills into an unattended run by accident.
+
 ## Adding another developer-only plugin
 
 1. Vendor it under `dev/plugins/<name>/` with a `.claude-plugin/plugin.json`.
