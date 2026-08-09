@@ -162,19 +162,39 @@ is worth recording: Claude Code accepts **clustered short flags**, so `-pd` and
 `--print` looks correct and misses every cluster — which is what the first
 version of this wrapper did.
 
-| Form | Wrapper |
-| :--- | :--- |
-| `-p`, `--print` | refused |
-| `-pd`, `-dp`, `-pv` (clusters) | refused |
-| `--print=true` | refused (the CLI also rejects it as an unknown option) |
-| `--permission-mode`, `--model`, `-d`, `-c` | passed through |
-| a positional prompt mentioning `-p` | passed through |
+Print mode also turned out not to be the only route to an unattended session,
+so the guard covers a class rather than a flag.
+
+| Form | Wrapper | Why |
+| :--- | :--- | :--- |
+| `-p`, `--print` | refused | print / non-interactive mode |
+| `-pd`, `-dp`, `-pv` | refused | clustered short flags engage `--print` too |
+| `--print=true` | refused | the CLI also rejects it as an unknown option |
+| `--bg`, `--background` | refused | "Start the session as a background agent" — runs locally, plugin loaded, nobody watching |
+| `--cloud` | refused | precaution, see below |
+| `--remote-control` | passed | documented as starting an *interactive* session |
+| `--permission-mode`, `--model`, `-d`, `-c`, `-w`, `--add-dir`, `--agent` | passed | ordinary interactive flags |
+| a positional prompt mentioning `-p` or `--bg` | passed | not a flag |
 
 Long flags are exempted before the cluster test, so `--permission-mode` is not
-caught by its leading `p`. `tests/test_dev_plugins.py` covers both directions —
-that the clustered forms are refused, and that ordinary invocation still works.
-A guard that refused everything would otherwise pass a refusal-only test while
-breaking the only supported way to use these skills.
+caught by its leading `p`. `--input-format` needs no rule: the CLI documents it
+as only working with `--print`, which is already refused.
+
+`--cloud` is refused on precaution rather than a demonstrated bypass. Whether
+`--plugin-dir` survives into a cloud container was not verified, and creating
+one to find out has side effects. The asymmetry decides it: refusing costs a
+developer one direct `claude` invocation, while being wrong the other way puts
+these skills in an unattended session.
+
+A blanket TTY requirement was considered and rejected. Claude Code documents
+`-p` as print mode and does not document redirected streams as activating it,
+so a TTY gate would break legitimate terminal wrappers without closing any hole
+the rules above miss.
+
+`tests/test_dev_plugins.py` covers both directions — that each refused form is
+refused, and that ordinary invocation still works. A guard that refused
+everything would otherwise pass a refusal-only test while breaking the only
+supported way to use these skills.
 
 This is a guardrail, not a boundary. A developer who wants headless-with-skills
 can call `claude --plugin-dir …` directly, and should. What it stops is a script

@@ -157,14 +157,18 @@ class TestDevPluginsStayOutOfAutonomousSessions(unittest.TestCase):
     def test_dev_session_refuses_non_interactive(self):
         """bin/dev-session must not be usable to get skills into a headless run.
 
-        The clustered forms are the ones that matter. Claude Code accepts
-        clustered short flags, so `-pd` and `-dp` engage --print exactly as `-p`
-        does; an exact-match guard looks correct and misses every cluster.
-        `--print=true` is currently rejected by the CLI as an unknown option,
+        Print mode is not the only way to reach an unattended session, so this
+        covers the class. Two forms are easy to miss and both were live holes:
+        clustered short flags (`-pd`, `-dp` engage --print exactly as `-p`
+        does, so an exact-match guard misses every cluster), and the background
+        agent flags (`--bg`/`--background`, documented as starting a background
+        agent, which runs locally with the plugin loaded). `--cloud` is refused
+        on precaution. `--print=true` is currently rejected by the CLI itself
         and is covered here so the wrapper does not depend on that.
         """
         self.assertTrue((ROOT / "bin" / "dev-session").is_file(), "bin/dev-session missing")
-        for flag in ("-p", "--print", "--print=true", "-pd", "-dp", "-pv"):
+        for flag in ("-p", "--print", "--print=true", "-pd", "-dp", "-pv",
+                     "--bg", "--background", "--cloud", "--cloud=desc"):
             result = self._run_wrapper(flag, "noop")
             with self.subTest(flag=flag):
                 self.assertEqual(result.returncode, 2, f"{flag} was not refused")
@@ -183,7 +187,9 @@ class TestDevPluginsStayOutOfAutonomousSessions(unittest.TestCase):
             ("--permission-mode", "plan"),   # long flag starting with p
             ("-d",),                         # short flag without p
             ("-c",),
-            ("explain the -p flag",),        # positional mentioning -p
+            ("--remote-control",),           # documented as interactive
+            ("-w",),
+            ("explain --bg and -p",),        # positional mentioning flags
         ):
             result = self._run_wrapper(*args, claude_bin="/bin/true")
             with self.subTest(args=args):

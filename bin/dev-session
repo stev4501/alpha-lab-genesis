@@ -34,22 +34,44 @@ PLUGIN_DIRS=(
 # A developer who genuinely wants headless-with-skills can invoke claude
 # directly with --plugin-dir and own that decision explicitly.
 #
-# Matching is deliberately wider than the literal "-p" and "--print". Claude
-# Code accepts clustered short flags, so "-pd" and "-dp" both engage --print
-# ("claude -pd" errors with "Input must be provided ... when using --print",
-# which is the flag doing its job, not rejecting the form). An exact-match
-# guard would miss every cluster. "--print=true" is rejected by the CLI itself
-# as an unknown option, but is matched here anyway so the wrapper does not
-# depend on that staying true.
+# Print mode is not the only way to get an unattended session, so the guard
+# covers a class rather than a flag:
+#
+#   --print, -p    print/non-interactive mode. Matching is deliberately wider
+#                  than the literal flags: Claude Code accepts clustered short
+#                  flags, so "-pd" and "-dp" engage --print exactly as "-p"
+#                  does ("claude -pd" errors with "Input must be provided ...
+#                  when using --print", which is the flag working, not
+#                  rejecting the form). An exact-match guard misses every
+#                  cluster. "--print=true" is rejected by the CLI itself as an
+#                  unknown option, but is matched anyway so this wrapper does
+#                  not depend on that staying true.
+#   --bg,
+#   --background   "Start the session as a background agent" -- runs locally,
+#                  so the plugin loads, with nobody watching.
+#   --cloud        "Create a cloud session". Refused on precaution rather than
+#                  a demonstrated bypass: whether --plugin-dir survives into a
+#                  cloud container was not verified, and creating one to find
+#                  out has side effects. The cost of refusing is a developer
+#                  calling claude directly; the cost of being wrong the other
+#                  way is skills in an unattended session.
+#
+# Deliberately NOT refused: --remote-control, documented as starting an
+# *interactive* session; and --input-format, which the CLI documents as only
+# working with --print, already refused above. A blanket TTY requirement is
+# also avoided -- it would break legitimate terminal wrappers without closing
+# any documented hole that these rules miss.
 #
 # Long flags are exempted before the cluster test so that --permission-mode and
 # friends are not caught by their leading "p".
 for arg in "$@"; do
   case "$arg" in
-    --print|--print=*) ;;   # explicit long form
-    --*)  continue ;;       # any other long flag is fine
-    -*p*) ;;                # short-flag cluster containing p: -p, -pd, -dp
-    *)    continue ;;       # positional argument
+    --print|--print=*) ;;                     # print mode, explicit long form
+    --bg|--background|--bg=*|--background=*) ;;   # background agent
+    --cloud|--cloud=*) ;;                     # cloud session
+    --*)  continue ;;                         # any other long flag is fine
+    -*p*) ;;                                  # short cluster with p: -p, -pd, -dp
+    *)    continue ;;                         # positional argument
   esac
   echo "dev-session: refusing non-interactive mode ($arg)." >&2
   echo "  These plugins are scoped to interactive developer sessions." >&2
