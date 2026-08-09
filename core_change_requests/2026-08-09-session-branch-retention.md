@@ -4,7 +4,7 @@
   by `workflow_dispatch` and observed that the branch was still on the remote
   when the session ended
 - Status: **proposed** — nothing applied. Patch attached and verified.
-  Revised 2026-08-09 after review rounds 1 and 2 on PR #13; see those sections.
+  Revised 2026-08-09 after review rounds 1-3 on PR #13; see those sections.
 - Requires sealed changes: no
 - Requires protected-path changes: yes (`loop/`, `.github/`) — human applies
 - Related: `docs/adr/0008-mvp-reduction.md` (exit criterion 2),
@@ -207,6 +207,61 @@ localized runner cannot turn a real error back into a silent keep.
 The three deletion outcomes are now distinguishable, which they were not
 before: deleted, benignly skipped, and broken.
 
+## Review round 3 (PR #13, 2026-08-09)
+
+Two findings, both accepted, plus one judgment call declined with reasons.
+
+### Enumeration failures reported a clean run
+
+`mapfile -t REMOTE_REFS < <(git ls-remote ...)` reports *mapfile's* status, not
+the producer's. A failed enumeration — no network, dead credential — left an
+empty array, and the run printed `0 deleted, 0 kept` and exited 0. Confirmed
+directly: producer `false`, `mapfile status=0`, zero entries, script survives.
+
+This is the same shape as the round 2 defect: a failure that presents as an
+uneventful success. The listing is now captured through a command
+substitution whose status is checked, and a failed enumeration is fatal. An
+enumeration that did not happen must not look like a remote with nothing on
+it; a listing that genuinely returns nothing still exits 0.
+
+### Stale-lease detection was text-fragile
+
+`grep -qF "stale info"` treated any stderr containing that phrase as a benign
+race, and a hook is free to print anything in its rejection — including that.
+Git's wording is not an interface, and `LC_ALL=C` only ever constrained our own
+side of it.
+
+Detection is now made from remote state rather than text. After a failed push
+the remote is re-queried for that ref: unchanged means the push failed on its
+own account and is an error; moved or absent is the race the lease exists to
+catch; and a re-query that itself fails leaves the outcome unknown, which is an
+error rather than a keep. `LC_ALL=C` stays, but only so diagnostics land in the
+log predictably — nothing branches on what it says.
+
+Verified with a hook that rejects the deletion *and prints the phrase
+`stale info` in its message*. The old code would have called that a benign
+race; it is now correctly an error, because the ref is still sitting on the
+commit that was judged.
+
+### Declined: removing the dormant `WORK_RETENTION_DAYS` path
+
+The reviewer flagged, as a judgment call, that shipping a positive-value code
+path invites a future configuration-only policy violation. The path is kept,
+for a reason specific to this repository: `WORK_RETENTION_DAYS` is set in
+`.github/workflows/prune-session-branches.yml`, and `.github/` is protected.
+Changing it from 0 is not a configuration tweak — it is a human editing a
+protected file, which is the same gate the `README.md` amendment itself would
+pass through. The activation risk the finding describes is already held by the
+layer ADR-0009 relies on everywhere else.
+
+Removing the path would also delete the thing the human is being asked to
+decide in this request, leaving no implementation behind the question.
+
+What was missing is that the conflict was documented only in comments. The
+script now prints a warning naming `README.md` whenever the value is positive,
+so an armed policy change is visible in the run log rather than only to
+someone reading the source at 04:17 on a Sunday.
+
 ## Verification
 
 `loop/prune_branches.sh` passes `bash -n`. It was exercised against a
@@ -243,22 +298,39 @@ Branch gains work between enumeration and delete, injected live during a
 survives, and this stays a keep with exit 0 after the round 2 change:
 
 ```
-KEEP   failed/2020-01-01-0101 — lease on 84954579 was stale; branch moved since enumeration
+KEEP   failed/2020-01-01-0101 — moved since enumeration (02b098cd -> 9e52e3e2); lease refused
 Deleted 0 branch(es), kept 1.
 script exit=0
 ```
 
-Remote refuses the deletion for a reason that is not a lease mismatch (round 2),
-reproduced with a `pre-receive` hook standing in for branch protection —
-previously a silent keep and exit 0:
+Remote refuses the deletion for a reason that is not a lease mismatch (rounds 2
+and 3), reproduced with a `pre-receive` hook standing in for branch protection.
+The hook deliberately prints `stale info` in its rejection, which the round 2
+text match would have swallowed; the ref is unchanged, so it is an error:
 
 ```
-ERROR  failed/2020-01-01-0101 — deletion failed, and not because of a stale lease:
-       remote: branch protection: deletion of refs/heads/failed/2020-01-01-0101 is not permitted
+ERROR  failed/2020-01-01-0101 — deletion failed and the branch still points at 02b098cd,
+       so this was not a lease race:
+       remote: rejected: stale info is not the reason, this is branch protection
         ! [remote rejected] failed/2020-01-01-0101 (pre-receive hook declined)
 Deleted 0 branch(es), kept 0.
 FATAL: 1 deletion(s) failed for reasons other than a stale lease.
 script exit=1
+```
+
+Enumeration itself fails (round 3) — previously `0 deleted, 0 kept` and exit 0:
+
+```
+FATAL: could not enumerate refs/heads/failed/* on origin; nothing was evaluated.
+exit=1
+```
+
+Another actor deletes the branch first — benign, since the outcome is the one
+intended:
+
+```
+KEEP   failed/2020-01-01-0101 — already gone from the remote; another actor deleted it
+script exit=0
 ```
 
 Ordinary successful deletion, confirming the stricter handling did not break

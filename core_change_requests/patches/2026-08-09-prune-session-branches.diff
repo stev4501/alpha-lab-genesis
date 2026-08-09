@@ -62,10 +62,10 @@ index 0000000..b852724
 +        run: bash loop/prune_branches.sh
 diff --git a/loop/prune_branches.sh b/loop/prune_branches.sh
 new file mode 100755
-index 0000000..97f75d8
+index 0000000..5a99e4b
 --- /dev/null
 +++ b/loop/prune_branches.sh
-@@ -0,0 +1,163 @@
+@@ -0,0 +1,206 @@
 +#!/usr/bin/env bash
 +# prune_branches.sh — retention policy for the branches run_session.sh leaves
 +# on the remote. Lives in loop/ (protected). The session agent never edits this
@@ -103,6 +103,14 @@ index 0000000..97f75d8
 +
 +cd "${REPO_DIR:-$(git rev-parse --show-toplevel)}"
 +
++# Raising this is a policy act, not a tuning knob, so it says so out loud in
++# the run log rather than only in a comment nobody reads at 04:17 on a Sunday.
++if [[ "$WORK_RETENTION_DAYS" -gt 0 ]]; then
++  echo "WARNING: WORK_RETENTION_DAYS=${WORK_RETENTION_DAYS} deletes failed branches that carry" >&2
++  echo "         rejected work. README.md's source-of-truth rules retain failed and discarded" >&2
++  echo "         experiments; this run assumes that rule has been amended." >&2
++fi
++
 +# Age comes from the session id in the branch name, not from the tip commit's
 +# date. A failed branch that produced no commits points at whatever main
 +# pointed at when the session started, so its tip date is main's date and can
@@ -127,7 +135,19 @@ index 0000000..97f75d8
 +# Enumerate BEFORE fetching, and treat the enumerated sha as the authority for
 +# the rest of the run. Reading state from a tracking ref instead would mean
 +# judging one commit and deleting whatever the name points at later.
-+mapfile -t REMOTE_REFS < <(git ls-remote --heads origin "refs/heads/failed/*")
++#
++# The listing is captured through a command substitution, not piped straight
++# into `mapfile < <(...)`. That form reports mapfile's status, never the
++# producer's, so a failed ls-remote — no network, dead credential — would leave
++# an empty array and the run would report a tidy "0 deleted, 0 kept" and exit
++# 0. An enumeration that did not happen must not look like a remote with
++# nothing on it. (A successful listing that is genuinely empty is fine, and
++# still exits 0.)
++if ! remote_listing="$(git ls-remote --heads origin "refs/heads/failed/*")"; then
++  echo "FATAL: could not enumerate refs/heads/failed/* on origin; nothing was evaluated." >&2
++  exit 1
++fi
++mapfile -t REMOTE_REFS <<< "$remote_listing"
 +
 +git fetch -q origin main
 +git fetch -q origin "+refs/heads/failed/*:refs/remotes/origin/failed/*"
@@ -199,21 +219,44 @@ index 0000000..97f75d8
 +  # moved since enumeration, the remote refuses and the work survives to be
 +  # re-evaluated — including its journal check — on the next run.
 +  #
-+  # A stale lease is the ONLY nonzero exit treated as benign. Everything else a
-+  # push can fail on — expired credentials, a revoked token, branch protection,
-+  # DNS, a 500 from the remote — must not be laundered into "the branch moved".
-+  # A pruner that reports a clean run while silently deleting nothing is worse
-+  # than one that fails, because nobody goes looking. LC_ALL=C pins the message
-+  # this match depends on against a localized runner.
++  # A lost lease is the ONLY failure treated as benign. Everything else a push
++  # can fail on — expired credentials, a revoked token, branch protection, DNS,
++  # a 500 from the remote — must not be laundered into "the branch moved". A
++  # pruner that reports a clean run while silently deleting nothing is worse
++  # than one that fails, because nobody goes looking.
++  #
++  # Which of the two it was is decided from the remote's state, not from the
++  # text of the error: git's wording is not an interface, and a hook is free to
++  # print anything it likes in its rejection, including the phrase we would be
++  # matching on. LC_ALL=C is here only so the diagnostics land in the log in a
++  # predictable language; nothing branches on what it says.
 +  if LC_ALL=C git push -q origin \
 +       --force-with-lease="refs/heads/${branch}:${sha}" \
 +       --delete "refs/heads/${branch}" 2>"$PUSH_ERR"; then
 +    echo "DELETE ${branch} — ${what}, ${age_days}d old, past ${limit}d"
 +    removed=$((removed + 1))
-+  elif grep -qF "stale info" "$PUSH_ERR"; then
-+    keep "$branch" "lease on ${sha:0:8} was stale; branch moved since enumeration"
++    continue
++  fi
++
++  # Ask the remote what the ref is now. Unchanged means the push failed for a
++  # reason of its own and the branch is still there to be dealt with; moved or
++  # gone means the race the lease exists to catch. A re-query that fails leaves
++  # the outcome unknown, and unknown is an error, not a keep.
++  if ! current="$(LC_ALL=C git ls-remote --heads origin "refs/heads/${branch}" 2>>"$PUSH_ERR")"; then
++    echo "ERROR  ${branch} — deletion failed and the remote could not be re-queried:" >&2
++    sed 's/^/       /' "$PUSH_ERR" >&2
++    failures=$((failures + 1))
++    continue
++  fi
++  current_sha="${current%%$'\t'*}"
++
++  if [[ -z "$current" ]]; then
++    keep "$branch" "already gone from the remote; another actor deleted it"
++  elif [[ "$current_sha" != "$sha" ]]; then
++    keep "$branch" "moved since enumeration (${sha:0:8} -> ${current_sha:0:8}); lease refused"
 +  else
-+    echo "ERROR  ${branch} — deletion failed, and not because of a stale lease:" >&2
++    echo "ERROR  ${branch} — deletion failed and the branch still points at ${sha:0:8}," >&2
++    echo "       so this was not a lease race:" >&2
 +    sed 's/^/       /' "$PUSH_ERR" >&2
 +    failures=$((failures + 1))
 +  fi
