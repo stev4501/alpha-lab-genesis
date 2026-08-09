@@ -154,8 +154,14 @@ class TestDevPluginsStayOutOfAutonomousSessions(unittest.TestCase):
             capture_output=True, text=True, cwd=ROOT, env=env, timeout=30,
         )
 
-    def test_dev_session_refuses_non_interactive(self):
-        """bin/dev-session must not be usable to get skills into a headless run.
+    def test_dev_session_refuses_unattended_flag_forms(self):
+        """The selected print, background, and cloud flag forms are refused.
+
+        Named for what it covers. It is not "refuses every non-interactive
+        mode" — the wrapper makes no such claim, and neither should the test.
+        Claude Code 2.1.226 also treats non-TTY stdout as non-interactive, and
+        the flag surface has not proven enumerable; see docs/dev-only-skills.md
+        for the accepted trade-offs and for the layer that actually holds.
 
         Print mode is not the only way to reach an unattended session, so this
         covers the class. Two forms are easy to miss and both were live holes:
@@ -196,8 +202,8 @@ class TestDevPluginsStayOutOfAutonomousSessions(unittest.TestCase):
                     f"{args} was not refused; -- must not end the scan",
                 )
 
-    def test_dev_session_still_accepts_interactive_use(self):
-        """The guard must reject -p, not everything.
+    def test_dev_session_still_accepts_ordinary_flags(self):
+        """The guard must reject the selected forms, not everything.
 
         Without this, a guard that refused every invocation would pass the test
         above and quietly break the only supported way to use these skills.
