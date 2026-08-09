@@ -52,9 +52,24 @@ Review the diff before accepting it. These skills instruct an agent operating
 in a repository whose integrity rules are enforced by convention as well as by
 `loop/validate_session.sh`.
 
+## Relationship to the marketplace copy
+
+`.claude/settings.json` declares `mattpocock-skills@claude-plugins-official` so
+that cloud and web sessions get these skills; `bin/dev-session` uses this
+vendored tree. Anthropic's official marketplace pins its entry to the same
+commit recorded above, so the two agree today.
+
+They can drift if the marketplace bumps its pin. To check:
+
+    grep -A4 '"name": "mattpocock-skills"' \
+      ~/.claude/plugins/marketplaces/claude-plugins-official/.claude-plugin/marketplace.json
+
+If the `sha` no longer matches the commit in the table above, the web route is
+running code this repository has not reviewed. Either re-vendor to the new
+commit and re-verify, or pin the web route elsewhere.
+
 ## Do not
 
-- Do not add this plugin to `enabledPlugins` in `.claude/settings.json`. That
-  would load it for every session, including autonomous ones, defeating the
-  entire arrangement.
-- Do not copy or symlink these skills into `.claude/skills/`.
+- Do not copy or symlink these skills into `.claude/skills/`. That path loads
+  into every session, and unlike the plugin route it is not what the runner's
+  reasoning was verified against.

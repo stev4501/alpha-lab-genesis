@@ -1,8 +1,12 @@
 # Developer-only skills
 
 How third-party Claude Code skills are made available to humans working in this
-repository without ever becoming available to the autonomous research sessions
-launched by `loop/run_session.sh`.
+repository without becoming usable by the autonomous research sessions launched
+by `loop/run_session.sh`.
+
+Note the wording. The plugin *is* loaded into autonomous sessions — that is the
+cost of reaching cloud and web sessions at all — and the runner strips skills so
+the agent never sees or invokes it. Verified by A/B; see below.
 
 ## The requirement
 
@@ -53,13 +57,54 @@ discovery path at any level. It is loaded per-session with an explicit flag:
 bin/dev-session          # == claude --plugin-dir dev/plugins/mattpocock-skills
 ```
 
-`loop/run_session.sh` passes no `--plugin-dir`, so autonomous sessions load
-nothing. Plugin skills are namespaced — `/mattpocock-skills:tdd` — so they
-cannot shadow a core skill or the bundled `/code-review`.
+`loop/run_session.sh` passes no `--plugin-dir`. Plugin skills are namespaced —
+`/mattpocock-skills:tdd` — so they cannot shadow a core skill or the bundled
+`/code-review`.
 
-The one thing that would break this is adding the plugin to `enabledPlugins` in
-`.claude/settings.json`. That makes it load for every session, including
-autonomous ones. `tests/test_dev_plugins.py` asserts this does not happen.
+### Two delivery routes, and why
+
+`--plugin-dir` only works where you control the launch — a local terminal.
+Claude Code on the web and other cloud sessions are launched by the harness, so
+the flag cannot be injected. Per the Claude Code docs, those sessions load
+skills from exactly three places: the repo's `.claude/skills/`, a plugin
+declared in the repo's `.claude/settings.json`, or skills enabled for your
+claude.ai account.
+
+The original arrangement used none of them, which meant these skills were
+unreachable from the sessions this repository is actually worked on. So the repo
+now declares the plugin:
+
+```json
+"enabledPlugins": { "mattpocock-skills@claude-plugins-official": true }
+```
+
+| Route | Used by | Copy |
+| :--- | :--- | :--- |
+| `enabledPlugins` | cloud and web sessions | Anthropic's official marketplace, pinned by that marketplace to `84fdeff` |
+| `bin/dev-session --plugin-dir` | local terminal | the vendored tree at `dev/plugins/`, pinned here to `84fdeff` |
+
+Both point at the same upstream commit today. They can drift if the marketplace
+bumps its pin; `dev/plugins/mattpocock-skills/VENDOR.md` records how to check.
+
+### This loads the plugin into the autonomous session too
+
+That is the deliberate cost, and it is acceptable only because the runner
+removes skills outright. Verified by A/B against the live CLI rather than argued
+from the flags:
+
+| Run | The agent's own answer |
+| :--- | :--- |
+| `claude -p` with project settings, no runner controls | `YES — mattpocock-skills:diagnosing-bugs, :tdd, :prototype` |
+| same, plus `--disable-slash-commands --disallowedTools "Skill"` | `NO — I don't have any skills whose name contains "mattpocock."` |
+
+The plugin loads and the runner strips it: the skills are not merely
+un-invokable, they are not listed to the agent at all.
+
+Be clear about what this trades away. Before, two independent things had to fail
+for the loop to see these skills — the plugin had to become discoverable *and*
+the runner controls had to be missing. Now only one does. The runner flags are
+the single point of failure, which is why `tests/test_dev_plugins.py` fails if
+`enabledPlugins` is ever declared without them.
 
 ## Why the runner's `--allowedTools` is not sufficient on its own
 
@@ -88,9 +133,10 @@ skills away from an autonomous session; if a skill were discoverable, the agent
 could invoke it, and its description would sit in the agent's context either
 way.
 
-This is a gap in a layer, not an active hole: nothing is discoverable today, and
-the arrangement above keeps it that way. But it means the guarantee currently
-rests on a flag being absent from one script rather than on an enforced control.
+This was a gap in a layer when nothing was discoverable. It is now the layer
+that carries the weight: `enabledPlugins` makes the plugin discoverable in every
+session that reads project settings, so `--allowedTools` omitting `Skill` stops
+nothing on its own, and the explicit controls below are what hold.
 
 ## The applied backstop
 
@@ -110,7 +156,8 @@ would do; both are cheap and fail independently.
 This costs the loop nothing, because the repository makes no use of the `Skill`
 tool on the autonomous path (see above). It converts the guarantee from "the
 loop was not handed the flag" into "the loop structurally cannot run a skill" —
-including one that someone later drops into `.claude/skills/` by mistake.
+including the plugin the repo now declares, and one someone later drops into
+`.claude/skills/` by mistake.
 
 `loop/` is human-owned under ADR-0009; this was applied at the operator's
 explicit direction during review, and `tests/test_dev_plugins.py` asserts the
@@ -118,8 +165,9 @@ runner still carries both controls.
 
 ## What the guarantee is, precisely
 
-The vendored skills are **never loaded as skills, never invokable, and not
-readable whole** by an autonomous session.
+These skills are **never listed to the agent, never invokable, and not readable
+whole** by an autonomous session — whether they arrive via the declared plugin
+or the vendored tree.
 
 That last clause is narrower than it may sound, and the difference matters.
 `dev/plugins/` holds ordinary files inside the repository. Not passing
