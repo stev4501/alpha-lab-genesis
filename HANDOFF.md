@@ -20,7 +20,9 @@ research.
 ## Orientation for a fresh agent
 
 - Mission and constraints: `MISSION.md`, `CONTEXT.md`, ADRs under `docs/adr/`
-  (read `0008-mvp-reduction.md` first).
+  (read `0008-mvp-reduction.md` and `0009-agent-owned-operations.md` first —
+  0009 settles who owns what: the agent owns forward motion, the human owns
+  the sealed core and its approvals).
 - Machine state: `STATE.json` (schema: `schemas/state.schema.json`).
 - Evidence: `EXPERIMENTS.jsonl` (append-only), `results/`, `reviews/`,
   `FAILURES.md` (open blockers B-0001, B-0003).
@@ -51,10 +53,12 @@ The loop is proved when all five have been demonstrated:
 
 1. Five consecutive scheduled sessions with no human input mid-run, each
    leaving a validated artifact and an updated handoff with
-   `loop/validate_session.sh` green. — progress: 0/5. Do not start counting
-   until BL-0005 lands: until the loop is pull-request-based, a green
-   validator is the session vouching for itself, and `CODEOWNERS` enforces
-   nothing (ADR-0008, "Enforcement reality").
+   `loop/validate_session.sh` green. — progress: 0/5. Counting starts with
+   the first scheduled session after the ADR-0009 revert lands: the loop is
+   deliberately direct-push (BL-0005 rescinded), a green validator
+   self-vouching is the intended evidence here, and the damage a wrong
+   session can do is bounded by server-side history protection, not by a
+   merge gate (ADR-0009, "Enforcement, honestly, by layer").
 2. One deliberately induced validation failure that salvages correctly:
    journal and handoff reach `main`, rejected work quarantined to a
    `failed/` branch. — not attempted

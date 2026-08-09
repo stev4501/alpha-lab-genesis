@@ -10,3 +10,4 @@ This index is append-only. Full decisions live in `docs/adr/`.
 - [ADR-0006: Content-addressed data snapshots](docs/adr/0006-content-addressed-data-snapshots.md)
 - Proposed, not approved: [ADR-0007: Bounded strategy evolution loop](docs/adr/0007-bounded-strategy-evolution-loop.md)
 - [ADR-0008: MVP reduction to the smallest provable autonomous loop](docs/adr/0008-mvp-reduction.md)
+- [ADR-0009: Agent-owned operations, human-owned core](docs/adr/0009-agent-owned-operations.md)

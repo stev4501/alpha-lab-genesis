@@ -1,8 +1,12 @@
 # BL-0005: Make the loop pull-request-based so CODEOWNERS binds
 
-- Status: open — steps 1 and 2 drafted as patches 2026-08-08, awaiting a human
-  to apply them; step 3 unchanged and still last
-- Priority: 5 (do before claiming exit criterion 1)
+- Status: RESCINDED 2026-08-09 by ADR-0009 — do not resume. Steps 1 and 2 were
+  drafted 2026-08-08, applied to `main` (PR #5, `8906f4f`), and then reverted
+  when the human operator decided the agent owns forward motion and no
+  pull-request gate belongs in the loop. Step 3 was never applied. The drafted
+  patches and the revert patch remain under `core_change_requests/patches/` as
+  the record.
+- Priority: none (rescinded)
 - Requires sealed changes: no
 - Requires protected-path changes: yes (`loop/`, `.github/`) — human applies
 - Origin: adversarial review of the branch-protection options, 2026-08-08

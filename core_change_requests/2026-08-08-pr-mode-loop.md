@@ -1,5 +1,13 @@
 # CCR 2026-08-08: make the loop pull-request-based (BL-0005)
 
+> **WITHDRAWN 2026-08-09 by ADR-0009.** This request was applied to `main`
+> (PR #5, `8906f4f`) and then reverted: the human operator decided the agent
+> owns the repository's forward motion, so no pull-request gate belongs in
+> the loop. Do not re-apply the patches below. They, and the revert patch
+> `patches/2026-08-09-rescind-pr-mode.diff`, are retained as the record of
+> the road not taken — including the five findings, which stay true and
+> matter to anyone who ever revisits this design.
+
 - Origin: `backlog/BL-0005-pr-mode-loop.md`, drafted in a supervised session
   2026-08-08 at the human's request
 - Requires sealed changes: no
