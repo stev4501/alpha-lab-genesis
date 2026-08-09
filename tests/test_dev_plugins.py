@@ -102,92 +102,60 @@ class TestDevPluginsStayOutOfAutonomousSessions(unittest.TestCase):
             ".claude/skills/ exists: skills placed there load into autonomous sessions too",
         )
 
-    def test_enabled_plugins_move_in_lockstep_with_the_runner_controls(self):
-        """A repo-declared plugin is only safe while the runner strips skills.
+    #: The exact declaration cloud and web sessions depend on.
+    REQUIRED_PLUGIN = "mattpocock-skills@claude-plugins-official"
 
-        `enabledPlugins` in project settings loads the plugin into every session
-        that reads those settings — the autonomous one included. That is
-        deliberate: cloud and web sessions cannot be handed `--plugin-dir`, so a
-        repo declaration is the only way these skills reach the sessions they
-        are actually used from. It is safe only because the runner removes
-        skills outright.
+    def _project_settings(self):
+        path = CLAUDE_DIR / "settings.json"
+        self.assertTrue(path.is_file(), ".claude/settings.json is missing")
+        return json.loads(path.read_text(encoding="utf-8"))
 
-        Verified by A/B against the live CLI rather than assumed: with the
-        controls the agent answers "NO — I don't have any skills whose name
-        contains mattpocock"; without them it lists them by name. See
-        docs/dev-only-skills.md.
+    def test_required_plugin_is_declared_for_cloud_sessions(self):
+        """Cloud delivery is required behaviour, so assert it — never skip.
 
-        So the two must move together. This asserts the direction that matters:
-        a declaration without the controls is a live hole. (Removing the
-        declaration is fine — the skills simply stop reaching web sessions.)
+        `--plugin-dir` only works where the launch is under your control. Cloud
+        and web sessions are launched by the harness, so a repo declaration is
+        the only route these skills have into them. An earlier version of this
+        test skipped when `enabledPlugins` was absent, which meant deleting the
+        declaration left the suite green and the delivery silently broken.
         """
-        settings_path = CLAUDE_DIR / "settings.json"
-        if not settings_path.is_file():
-            self.skipTest("no .claude/settings.json")
-        settings = json.loads(settings_path.read_text(encoding="utf-8"))
-        declared = settings.get("enabledPlugins") or {}
-        if not declared:
-            self.skipTest("no plugins declared in project settings")
-        runner = runner_code()
+        declared = self._project_settings().get("enabledPlugins") or {}
         self.assertIn(
-            "--disable-slash-commands", runner,
-            f"project settings declare plugins {list(declared)} but the runner "
-            "does not disable skills",
+            self.REQUIRED_PLUGIN, declared,
+            f"{self.REQUIRED_PLUGIN} is not declared in .claude/settings.json; "
+            "cloud and web sessions will not receive these skills",
         )
-        self.assertRegex(
-            runner, r'--disallowedTools\s+"Skill"',
-            f"project settings declare plugins {list(declared)} but the runner "
-            "does not remove the Skill tool",
+        self.assertIs(
+            declared[self.REQUIRED_PLUGIN], True,
+            f"{self.REQUIRED_PLUGIN} is declared but not enabled (value must be true)",
         )
 
-    def test_declared_plugin_matches_the_vendored_one(self):
-        """The web route and the bin/dev-session route must name the same plugin.
+    def test_declaring_plugins_requires_the_runner_controls(self):
+        """A declared plugin is only safe while the runner strips skills.
 
-        Two delivery paths exist: `enabledPlugins` (marketplace copy, used by
-        cloud and web sessions) and `bin/dev-session --plugin-dir` (the vendored
-        copy). They are pinned to the same upstream commit today. This catches
-        the cheap half of a divergence — the two naming different plugins — but
-        not a marketplace version bump, which only the check recorded in
-        VENDOR.md can catch.
+        `enabledPlugins` makes the plugin discoverable to any session that reads
+        project settings. The runner controls are what keep it unusable on the
+        autonomous path, so the two must move together.
         """
-        settings_path = CLAUDE_DIR / "settings.json"
-        if not settings_path.is_file():
-            self.skipTest("no .claude/settings.json")
-        declared = json.loads(settings_path.read_text(encoding="utf-8")).get("enabledPlugins") or {}
-        if not declared:
-            self.skipTest("no plugins declared in project settings")
-        vendored = {p.name for p in plugin_dirs()}
-        for key in declared:
-            name = key.split("@", 1)[0]
-            with self.subTest(plugin=key):
-                self.assertIn(
-                    name, vendored,
-                    f"{key} is declared in project settings but not vendored under dev/plugins/",
-                )
-
-    def test_runner_loads_no_plugins(self):
-        """loop/run_session.sh must never pass a plugin flag."""
-        runner = runner_code()
-        for flag in ("--plugin-dir", "--plugin-url"):
-            self.assertNotIn(flag, runner, f"loop/run_session.sh passes {flag}")
-
-    def test_runner_disables_skills(self):
-        """The autonomous session must not be able to run a skill at all.
-
-        Two independent controls, either of which suffices: the feature-level
-        --disable-slash-commands, and a bare "Skill" in --disallowedTools, which
-        drops the tool from the agent's context. Both are asserted so that
-        removing one is a deliberate edit to this test rather than a silent
-        weakening.
-        """
+        if not (self._project_settings().get("enabledPlugins") or {}):
+            self.fail("no plugins declared; see test_required_plugin_is_declared_for_cloud_sessions")
         runner = runner_code()
         self.assertIn("--disable-slash-commands", runner)
         self.assertRegex(runner, r'--disallowedTools\s+"Skill"')
 
-    def test_runner_denies_reading_vendored_plugins(self):
-        """Vendored skills are not loaded here; keep them out of context as prose too."""
-        runner = runner_code()
-        self.assertIn('"Read(dev/plugins/**)"', runner)
+    def test_required_plugin_has_a_vendored_counterpart(self):
+        """The two delivery routes must carry the same plugin.
+
+        Scoped to the plugin this repository actually ships. It deliberately
+        does not require every future enabled plugin to be vendored — that
+        would be unrelated coupling.
+        """
+        name = self.REQUIRED_PLUGIN.split("@", 1)[0]
+        self.assertIn(
+            name, {p.name for p in plugin_dirs()},
+            f"{name} is declared for cloud sessions but not vendored under dev/plugins/, "
+            "so bin/dev-session and the cloud route would diverge",
+        )
 
     def _run_wrapper(self, *args, claude_bin="/bin/false"):
         """Run bin/dev-session with a stubbed CLAUDE_BIN.

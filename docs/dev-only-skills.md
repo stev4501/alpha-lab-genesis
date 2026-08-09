@@ -83,28 +83,63 @@ now declares the plugin:
 | `enabledPlugins` | cloud and web sessions | Anthropic's official marketplace, pinned by that marketplace to `84fdeff` |
 | `bin/dev-session --plugin-dir` | local terminal | the vendored tree at `dev/plugins/`, pinned here to `84fdeff` |
 
-Both point at the same upstream commit today. They can drift if the marketplace
-bumps its pin; `dev/plugins/mattpocock-skills/VENDOR.md` records how to check.
+Both point at the same upstream commit today. **The cloud route is not
+immutably pinned by this repository, though.** `.claude/settings.json` names
+only `plugin@marketplace`; the marketplace controls which commit that resolves
+to, and it can change what cloud sessions execute without any change here. A
+grep of one developer's marketplace cache (recorded in `VENDOR.md`) detects
+drift after the fact; it is not an integrity gate.
 
-### This loads the plugin into the autonomous session too
+That also bounds what the runner controls cover. They remove *skills*. A plugin
+may ship agents, hooks, and MCP servers, and those are not skills. Today's
+`84fdeff` payload contains only skills — verified for the vendored copy — but a
+marketplace bump could change that, and the controls would not stop it.
 
-That is the deliberate cost, and it is acceptable only because the runner
-removes skills outright. Verified by A/B against the live CLI rather than argued
-from the flags:
+A repository-controlled marketplace with an explicit `sha` would close both
+gaps. `extraKnownMarketplaces` is the mechanism, but it stores an **absolute**
+`directory` path, which is not portable between a laptop and a cloud container,
+and whether project-scoped `extraKnownMarketplaces` is honoured at all was not
+established. Unresolved; see the PR discussion.
+
+### What is verified, and what is not
+
+Be precise here, because the first version of this section overclaimed.
+
+**Verified — the runner strips skills when the plugin is present.** A/B against
+the live CLI, in a container where the plugin was already installed:
 
 | Run | The agent's own answer |
 | :--- | :--- |
-| `claude -p` with project settings, no runner controls | `YES — mattpocock-skills:diagnosing-bugs, :tdd, :prototype` |
+| `claude -p`, no runner controls | `YES — mattpocock-skills:diagnosing-bugs, :tdd, :prototype` |
 | same, plus `--disable-slash-commands --disallowedTools "Skill"` | `NO — I don't have any skills whose name contains "mattpocock."` |
 
-The plugin loads and the runner strips it: the skills are not merely
-un-invokable, they are not listed to the agent at all.
+That evidence is the model's own report of its skill list. It is good evidence
+that the skills are neither offered nor invokable; it is not proof about what
+sits in the context window, so this document does not claim "removed from
+context", only that the agent is not offered them and cannot invoke them.
 
-Be clear about what this trades away. Before, two independent things had to fail
-for the loop to see these skills — the plugin had to become discoverable *and*
-the runner controls had to be missing. Now only one does. The runner flags are
-the single point of failure, which is why `tests/test_dev_plugins.py` fails if
-`enabledPlugins` is ever declared without them.
+**Not verified — that the declaration alone delivers the plugin.** Tested from a
+clean plugin state (fresh clone of the branch, `CLAUDE_CONFIG_DIR` with no
+`plugins/`), twice:
+
+| Check | Result |
+| :--- | :--- |
+| skills visible with only the repo declaration | **NO** |
+| `~/.claude/plugins/installed_plugins.json` afterwards | `{"version": 2, "plugins": {}}` |
+
+So `claude -p` does **not** install a repo-declared plugin. The Claude Code docs
+scope this behaviour to cloud sessions — "repo-declared plugins install at
+session start" — which is a different path from `claude -p`, so this result does
+not disprove the arrangement. It does mean the cloud route is **unproven** until
+a fresh cloud session on this branch is shown to load a namespaced skill.
+
+**Consequence for the loop, which cuts the other way.** The autonomous runner is
+`claude -p` in a fresh CI container with no `~/.claude/plugins/`. On the evidence
+above it would not install the declared plugin at all, so the "reduction in
+defence in depth" this change appeared to introduce may not materialise on that
+path. Do not lean on that: it is an inference from two runs, the runner controls
+are what the tests actually enforce, and `tests/test_dev_plugins.py` fails if
+`enabledPlugins` is declared without them.
 
 ## Why the runner's `--allowedTools` is not sufficient on its own
 
