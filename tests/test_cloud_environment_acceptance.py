@@ -1,5 +1,6 @@
 """Tests for the PR-only cloud-environment acceptance validator."""
 
+import hashlib
 import importlib.util
 import unittest
 from pathlib import Path
@@ -14,6 +15,13 @@ SPEC.loader.exec_module(MODULE)
 
 
 class TestCloudEnvironmentAcceptanceValidator(unittest.TestCase):
+    def test_setup_digest_ignores_platform_trimmed_final_newline(self):
+        raw = MODULE.SETUP_SCRIPT.read_bytes()
+        self.assertEqual(
+            MODULE.setup_script_sha256(),
+            hashlib.sha256(raw.rstrip(b"\r\n")).hexdigest(),
+        )
+
     def test_pending_receipt_fails(self):
         receipt = MODULE.pending_receipt()
         self.assertIn("status must be verified", MODULE.validate(receipt))

@@ -90,15 +90,17 @@ the pasted setup text matches that reviewed script, whether setup ran or was
 skipped, direct invocation, subagent invocation, and a UTC verification
 timestamp in the protected acceptance receipt carried by the implementation PR.
 
-Before starting the first session, run:
+Before starting the first session, calculate the canonical digest:
 
 ```bash
-sha256sum dev/cloud/setup-mattpocock-skills.sh
+python -c 'import hashlib,pathlib; p=pathlib.Path("dev/cloud/setup-mattpocock-skills.sh"); print(hashlib.sha256(p.read_bytes().rstrip(b"\r\n")).hexdigest())'
 ```
 
 Record that digest in the receipt and set `setupScriptDigestMatched` only after
-confirming the environment setup field contains the same reviewed script. Any
-later script change makes the PR check red again.
+confirming the environment setup field contains the same reviewed script. The
+digest deliberately ignores trailing CR/LF characters because Claude's
+environment editor trims the final newline when saving; all executable content
+remains bound. Any later content change makes the PR check red again.
 
 The PR-only workflow is a visible failing check, not a server-enforced merge
 rule. ADR-0009 intentionally has no required PR gate; the human operator must

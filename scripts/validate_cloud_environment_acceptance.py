@@ -21,7 +21,9 @@ CLAUDE_VERSION = "2.1.226"
 
 
 def setup_script_sha256():
-    return hashlib.sha256(SETUP_SCRIPT.read_bytes()).hexdigest()
+    # Claude's environment editor trims trailing newlines. Hash the executable
+    # content rather than textarea EOF normalization.
+    return hashlib.sha256(SETUP_SCRIPT.read_bytes().rstrip(b"\r\n")).hexdigest()
 
 
 def pending_receipt():

@@ -1,6 +1,6 @@
 diff --git a/.claude/cloud-environment-plugin-acceptance.json b/.claude/cloud-environment-plugin-acceptance.json
 new file mode 100644
-index 0000000..a17ae6a
+index 0000000..201098f
 --- /dev/null
 +++ b/.claude/cloud-environment-plugin-acceptance.json
 @@ -0,0 +1,20 @@
@@ -12,7 +12,7 @@ index 0000000..a17ae6a
 +  "gitCommitSha": "84fdeffd12f2ee307994d1eb6feb48173b6e0502",
 +  "claudeVersion": "2.1.226",
 +  "networkAccess": "Trusted",
-+  "setupScriptSha256": "7c0262c9485ee8836c88a28d6d4bb2f2945cbe5d1b4f109f9a4aa8f7a2a2eb3c",
++  "setupScriptSha256": "043379e85b13092582ab3f17eef97754652f7cc747e10cc2b02917fa27d6af7b",
 +  "setupScriptDigestMatched": false,
 +  "firstSessionDirectInvocation": false,
 +  "firstSessionSubagentInvocation": false,
@@ -49,10 +49,10 @@ index 0000000..fcbef6c
 +      - run: python scripts/validate_cloud_environment_acceptance.py
 diff --git a/scripts/validate_cloud_environment_acceptance.py b/scripts/validate_cloud_environment_acceptance.py
 new file mode 100644
-index 0000000..2df4f8c
+index 0000000..9e072f1
 --- /dev/null
 +++ b/scripts/validate_cloud_environment_acceptance.py
-@@ -0,0 +1,127 @@
+@@ -0,0 +1,129 @@
 +#!/usr/bin/env python3
 +"""Validate the protected cloud-environment plugin acceptance receipt."""
 +
@@ -76,7 +76,9 @@ index 0000000..2df4f8c
 +
 +
 +def setup_script_sha256():
-+    return hashlib.sha256(SETUP_SCRIPT.read_bytes()).hexdigest()
++    # Claude's environment editor trims trailing newlines. Hash the executable
++    # content rather than textarea EOF normalization.
++    return hashlib.sha256(SETUP_SCRIPT.read_bytes().rstrip(b"\r\n")).hexdigest()
 +
 +
 +def pending_receipt():
