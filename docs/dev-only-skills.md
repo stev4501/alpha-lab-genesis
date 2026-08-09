@@ -327,10 +327,16 @@ A blanket TTY requirement was considered and rejected. Claude Code documents
 so a TTY gate would break legitimate terminal wrappers without closing any hole
 the rules above miss.
 
-`tests/test_dev_plugins.py` covers both directions — that each refused form is
-refused, and that ordinary invocation still works. A guard that refused
-everything would otherwise pass a refusal-only test while breaking the only
-supported way to use these skills.
+`tests/test_dev_session.py` covers both directions — every refused form above
+and every allowed one, asserted against the rules directly rather than through
+a subprocess. A guard that refused everything would otherwise pass a
+refusal-only test while breaking the only supported way to use these skills.
+
+`bin/dev-session` is a small Python script rather than a shell wrapper. It
+started as three lines of bash; by the time it had a flag-class guard, a config
+pointer, and its own failure modes, every assertion about it had to go through a
+stubbed subprocess. As Python its rules are importable, which is what lets the
+flag table be exhaustive instead of representative.
 
 This is a guardrail, not a boundary, and the distinction is load-bearing. The
 wrapper rejects **selected explicit print, background, and cloud flag forms** —

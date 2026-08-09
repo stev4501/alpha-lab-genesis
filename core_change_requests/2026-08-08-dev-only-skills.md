@@ -214,7 +214,7 @@ To confirm the tree matches the record:
 
 ```bash
 git apply --check --reverse core_change_requests/patches/2026-08-08-a-skill-backstop.diff
-bash -n loop/run_session.sh && bash -n bin/dev-session
+bash -n loop/run_session.sh   # bin/dev-session is Python now; tests/test_dev_session.py covers it
 python scripts/validate_repository.py
 python -m unittest discover -s tests
 ```

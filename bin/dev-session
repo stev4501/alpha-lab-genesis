@@ -1,146 +1,147 @@
-#!/usr/bin/env bash
-# dev-session — start an interactive Claude Code session with the developer-only
-# skill plugins loaded.
-#
-# These skills are for humans doing development work in this repository. They are
-# deliberately unavailable to the autonomous research sessions started by
-# loop/run_session.sh, which loads no plugin directories at all.
-#
-# Usage:
-#   bin/dev-session                 # interactive session
-#   bin/dev-session /mattpocock-skills:tdd
-#
-# Selected print, background, and cloud flag forms are refused: see the check
-# below. Other claude flags are forwarded verbatim.
-#
-# See docs/dev-only-skills.md for why this is a flag and not a settings entry.
+#!/usr/bin/env python3
+"""Start an interactive Claude Code session with the developer-only skills.
 
-set -euo pipefail
+These skills are for humans working in this repository. The autonomous research
+sessions started by `loop/run_session.sh` load no plugin directories and strip
+skills outright, so nothing here affects them.
 
-REPO_DIR="$(git -C "$(dirname "${BASH_SOURCE[0]}")" rev-parse --show-toplevel)"
-CLAUDE_BIN="${CLAUDE_BIN:-claude}"
+Two flags are passed:
 
-# Every directory listed here is loaded as a plugin for this session only.
-# Add a plugin by dropping it in dev/plugins/<name>/ with a
-# .claude-plugin/plugin.json and adding the path below.
-PLUGIN_DIRS=(
-  "$REPO_DIR/dev/plugins/mattpocock-skills"
+    --plugin-dir <vendored plugin>          loads the skills
+    --append-system-prompt-file <pointer>   tells them where their config lives
+
+Both matter. Most of the skills expect an issue tracker and label vocabulary to
+"have been provided" without naming a path, so the pointer is what stops them
+asking for `/setup-matt-pocock-skills` to be re-run.
+
+Selected print, background, and cloud flag forms are refused; see
+`refusal_reason` and `docs/dev-only-skills.md` for the rules and the evidence
+behind them. Everything else is forwarded verbatim.
+
+Usage:
+    bin/dev-session
+    bin/dev-session /mattpocock-skills:tdd
+    bin/dev-session --model sonnet
+"""
+
+from __future__ import annotations
+
+import os
+import subprocess
+import sys
+from pathlib import Path
+
+#: Long flags that put the session somewhere nobody is watching. Matched exactly
+#: or with an `=value` suffix, so `--remote-control` is unaffected by `--remote`.
+REFUSED_LONG = frozenset(
+    {"--print", "--bg", "--background", "--cloud", "--remote"}
 )
 
-# Reject selected print, background, and cloud flag forms.
-#
-# Be precise about what this is: a guardrail against a script casually reaching
-# for this wrapper to get skills into an unattended run. It is NOT a general
-# "interactive only" gate and does not try to be. Claude Code 2.1.226 also
-# treats non-TTY stdout as non-interactive, and the flag surface has proven not
-# to be something anyone can enumerate once and declare closed -- four bypasses
-# were found across three review rounds, including a hidden --remote alias that
-# never appears in `claude --help`. Anything relying on this being airtight is
-# relying on the wrong layer.
-#
-# The layer that actually holds is runner-side: loop/run_session.sh never
-# invokes this wrapper, passes no --plugin-dir at all, and supplies
-# --disable-slash-commands plus --disallowedTools "Skill" "Read(dev/plugins/**)".
-#
-# A developer who genuinely wants headless-with-skills can invoke claude
-# directly with --plugin-dir and own that decision explicitly. That route must
-# also pass --append-system-prompt-file docs/agents/session-prompt.md, or the
-# skills load without their configuration.
-#
-# Print mode is not the only way to get an unattended session, so the guard
-# covers a class rather than a flag:
-#
-#   --print, -p    print/non-interactive mode. Matching is deliberately wider
-#                  than the literal flags: Claude Code accepts clustered short
-#                  flags, so "-pd" and "-dp" engage --print exactly as "-p"
-#                  does ("claude -pd" errors with "Input must be provided ...
-#                  when using --print", which is the flag working, not
-#                  rejecting the form). An exact-match guard misses every
-#                  cluster. "--print=true" is rejected by the CLI itself as an
-#                  unknown option, but is matched anyway so this wrapper does
-#                  not depend on that staying true.
-#   --bg,
-#   --background   "Start the session as a background agent" -- runs locally,
-#                  so the plugin loads, with nobody watching.
-#   --cloud,
-#   --remote       "Create a cloud session", and its deprecated alias. Refused
-#                  on precaution rather than a demonstrated bypass: whether
-#                  --plugin-dir survives into a cloud container was not
-#                  verified, and creating one to find out has side effects. The
-#                  cost of refusing is a developer calling claude directly; the
-#                  cost of being wrong the other way is skills in an unattended
-#                  session.
-#
-# Deliberately NOT refused: --remote-control and its --rc alias, documented as
-# starting an *interactive* session driven by a human elsewhere; and
-# --input-format, which the CLI documents as only working with --print, already
-# refused above. A blanket TTY requirement is also avoided -- it would break
-# legitimate terminal wrappers without closing any hole these rules miss.
-#
-# NOTE for anyone extending this list: `claude --help` is NOT the authoritative
-# flag surface. --remote and --rc are both recognized and neither appears in
-# help output. To test whether a flag exists without triggering its side
-# effects, exploit the fact that the parser names the FIRST unknown option:
-#
-#     claude <candidate> --print=true
-#
-# If the error names <candidate>, it is not a real flag; if it names
-# --print=true, the candidate was accepted.
-#
-# Long flags are exempted before the cluster test so that --permission-mode and
-# friends are not caught by their leading "p".
-#
-# Scanning deliberately does NOT stop at "--". Claude Code 2.1.226 still acts
-# on --bg after an end-of-options marker: `claude -- --bg` starts a background
-# session rather than treating "--bg" as prompt text. Honouring "--" here would
-# therefore hand back the exact bypass this guard closes. Verified against the
-# real CLI, not assumed from convention -- see the compatibility check in
-# docs/dev-only-skills.md, and redo it when Claude Code is upgraded.
-for arg in "$@"; do
-  case "$arg" in
-    --print|--print=*) ;;                     # print mode, explicit long form
-    --bg|--background|--bg=*|--background=*) ;;   # background agent
-    --cloud|--cloud=*|--remote|--remote=*) ;; # cloud session, and its alias
-    --*)  continue ;;                         # any other long flag is fine
-    -*p*) ;;                                  # short cluster with p: -p, -pd, -dp
-    *)    continue ;;                         # positional argument
-  esac
-  echo "dev-session: refusing $arg (print, background and cloud session flags)." >&2
-  echo "  These plugins are scoped to interactive developer sessions." >&2
-  echo "  To opt out deliberately, call claude directly — include the config" >&2
-  echo "  pointer, or the skills start unconfigured:" >&2
-  echo "    claude --plugin-dir dev/plugins/mattpocock-skills \\" >&2
-  echo "           --append-system-prompt-file docs/agents/session-prompt.md $arg ..." >&2
-  exit 2
-done
+#: Plugin directories loaded for the session. Add one by dropping it in
+#: dev/plugins/<name>/ with a .claude-plugin/plugin.json and listing it here.
+PLUGIN_DIRS = ("dev/plugins/mattpocock-skills",)
 
-PLUGIN_ARGS=()
-for dir in "${PLUGIN_DIRS[@]}"; do
-  if [[ ! -f "$dir/.claude-plugin/plugin.json" ]]; then
-    echo "dev-session: not a plugin directory (no .claude-plugin/plugin.json): $dir" >&2
-    exit 1
-  fi
-  PLUGIN_ARGS+=(--plugin-dir "$dir")
-done
+#: Text appended to the system prompt, naming the files under docs/agents/.
+#: Kept in a file so a direct `claude --plugin-dir ...` call can carry the same
+#: pointer with one extra flag instead of retyping a paragraph.
+CONFIG_PROMPT = "docs/agents/session-prompt.md"
 
-# Point the skills at their configuration.
-#
-# Most of them say "the issue tracker should have been provided to you — run
-# /setup-matt-pocock-skills if not" and never name a path; only code-review
-# references docs/agents/issue-tracker.md directly. The setup skill's normal
-# answer is an `## Agent skills` block in CLAUDE.md or AGENTS.md, which is
-# auto-loaded project memory and would therefore also land in every autonomous
-# session. Injecting the pointer here instead reaches wrapper-launched sessions
-# only. See docs/agents/README.md.
-#
-# The text lives in a file rather than inline so that a direct
-# `claude --plugin-dir ...` invocation can carry the same pointer with one extra
-# flag, instead of having to reproduce a paragraph by hand.
-CONFIG_PROMPT="$REPO_DIR/docs/agents/session-prompt.md"
-if [[ ! -f "$CONFIG_PROMPT" ]]; then
-  echo "dev-session: missing $CONFIG_PROMPT — skills would start unconfigured." >&2
-  exit 1
-fi
 
-cd "$REPO_DIR"
-exec "$CLAUDE_BIN" "${PLUGIN_ARGS[@]}" --append-system-prompt-file "$CONFIG_PROMPT" "$@"
+def refusal_reason(arg: str) -> str | None:
+    """Why `arg` is refused, or None if it is fine to forward.
+
+    Three rules, in order — the order is what makes it correct:
+
+    1. Exact long forms and their `=value` variants.
+    2. Any other `--long` flag passes. This must come before rule 3, or
+       `--permission-mode` is caught by its leading "p".
+    3. A single-dash cluster containing "p". Claude Code accepts clustered short
+       flags, so `-pd` and `-dp` engage `--print` exactly as `-p` does; an
+       exact-match guard on `-p` misses every cluster.
+
+    Note there is no `--` handling. Claude Code does not treat it as
+    end-of-options for these flags — `claude -- --bg` starts a background
+    session — so honouring it here would hand back the bypass this closes.
+    """
+    head = arg.split("=", 1)[0]
+    if head in REFUSED_LONG:
+        return f"{head} starts a print, background, or cloud session"
+    if arg.startswith("--"):
+        return None
+    if arg.startswith("-") and "p" in arg:
+        return f"{arg} is a short-flag cluster containing -p (print mode)"
+    return None
+
+
+def first_refusal(args: list[str]) -> tuple[str, str] | None:
+    """The first refused argument and its reason, or None."""
+    for arg in args:
+        reason = refusal_reason(arg)
+        if reason is not None:
+            return arg, reason
+    return None
+
+
+def build_argv(
+    claude_bin: str,
+    repo_dir: Path,
+    user_args: list[str],
+    plugin_dirs: tuple[str, ...] = PLUGIN_DIRS,
+    config_prompt: str = CONFIG_PROMPT,
+) -> list[str]:
+    """The full command line, with repository-relative paths made absolute."""
+    argv = [claude_bin]
+    for rel in plugin_dirs:
+        argv += ["--plugin-dir", str(repo_dir / rel)]
+    argv += ["--append-system-prompt-file", str(repo_dir / config_prompt)]
+    return argv + user_args
+
+
+def repo_root() -> Path:
+    return Path(
+        subprocess.run(
+            ["git", "-C", str(Path(__file__).resolve().parent), "rev-parse", "--show-toplevel"],
+            check=True, capture_output=True, text=True,
+        ).stdout.strip()
+    )
+
+
+def check_paths(repo_dir: Path, plugin_dirs=PLUGIN_DIRS, config_prompt=CONFIG_PROMPT) -> list[str]:
+    """Problems that would start a session missing its skills or its config."""
+    problems = []
+    for rel in plugin_dirs:
+        if not (repo_dir / rel / ".claude-plugin" / "plugin.json").is_file():
+            problems.append(f"not a plugin directory (no .claude-plugin/plugin.json): {rel}")
+    if not (repo_dir / config_prompt).is_file():
+        problems.append(f"missing {config_prompt} — skills would start unconfigured")
+    return problems
+
+
+def main(user_args: list[str]) -> int:
+    repo_dir = repo_root()
+
+    refused = first_refusal(user_args)
+    if refused is not None:
+        arg, reason = refused
+        print(f"dev-session: refusing {arg} — {reason}.", file=sys.stderr)
+        print("  These plugins are scoped to interactive developer sessions.", file=sys.stderr)
+        print("  To opt out deliberately, call claude directly — include the", file=sys.stderr)
+        print("  config pointer, or the skills start unconfigured:", file=sys.stderr)
+        print(f"    claude --plugin-dir {PLUGIN_DIRS[0]} \\", file=sys.stderr)
+        print(f"           --append-system-prompt-file {CONFIG_PROMPT} {arg} ...", file=sys.stderr)
+        return 2
+
+    problems = check_paths(repo_dir)
+    if problems:
+        for problem in problems:
+            print(f"dev-session: {problem}", file=sys.stderr)
+        return 1
+
+    claude_bin = os.environ.get("CLAUDE_BIN", "claude")
+    argv = build_argv(claude_bin, repo_dir, user_args)
+    os.chdir(repo_dir)
+    os.execvp(argv[0], argv)  # replaces this process; never returns
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))
