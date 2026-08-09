@@ -1,6 +1,26 @@
 {
   "permissions": {
     "deny": [
+      "Edit(evaluator/**)",
+      "Write(evaluator/**)",
+      "Edit(scripts/**)",
+      "Write(scripts/**)",
+      "Edit(schemas/**)",
+      "Write(schemas/**)",
+      "Edit(loop/**)",
+      "Write(loop/**)",
+      "Edit(.github/**)",
+      "Write(.github/**)",
+      "Edit(.claude/**)",
+      "Write(.claude/**)",
+      "Edit(CORE_MANIFEST.json)",
+      "Write(CORE_MANIFEST.json)",
+      "Edit(MISSION.md)",
+      "Write(MISSION.md)",
+      "Edit(CONTEXT.md)",
+      "Write(CONTEXT.md)",
+      "Edit(CODEOWNERS)",
+      "Write(CODEOWNERS)",
       "Edit(results/**)",
       "Write(results/**)",
       "Edit(reviews/**)",
@@ -28,7 +48,11 @@
       "Bash(git rebase *)",
       "Bash(git reset *)",
       "Bash(git rm *)",
-      "Bash(git tag *)"
+      "Bash(git tag *)",
+      "Bash(curl *)",
+      "Bash(wget *)",
+      "Bash(pip install *)",
+      "Bash(npm *)"
     ]
   }
 }
