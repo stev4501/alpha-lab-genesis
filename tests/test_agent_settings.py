@@ -18,7 +18,9 @@ repository default, it covers every path the validator would fail a session for
 touching, and it refuses to start when it cannot load them.
 """
 
+import fcntl
 import json
+import os
 import re
 import shutil
 import subprocess
@@ -200,11 +202,31 @@ class TestRunnerFailsClosedOnMissingSettings(unittest.TestCase):
         return tmp
 
     def _run_preflight(self, settings: str | None):
+        """Run the real runner against a scratch repository.
+
+        `LOCKFILE` is per-scratch-repo on purpose. `run_session.sh` runs the
+        test suite from inside its own `flock` region, so a test that launched a
+        runner on the default lock path would collide with the session running
+        it: the child sees "another session is running", exits 0, and never
+        reaches the preflight under test. That failure only appears when the
+        suite runs the way the loop actually runs it, which is the way that
+        matters — a green local suite would have put every autonomous run into
+        maintenance mode.
+        """
         tmp = self._scratch_repo(settings)
+        # Outside the repository, not in it: the runner creates the lock file
+        # before it checks for a clean working tree, so a lock inside the tree
+        # trips the preceding preflight instead.
+        lock = tmp.with_suffix(".lock")
+        self.addCleanup(lock.unlink, True)
         return subprocess.run(
             ["bash", "loop/run_session.sh"],
             cwd=tmp, capture_output=True, text=True,
-            env={"PATH": __import__("os").environ["PATH"], "REPO_DIR": str(tmp)},
+            env={
+                "PATH": os.environ["PATH"],
+                "REPO_DIR": str(tmp),
+                "LOCKFILE": str(lock),
+            },
         )
 
     def test_missing_settings_file_stops_the_session(self):
@@ -229,6 +251,25 @@ class TestRunnerFailsClosedOnMissingSettings(unittest.TestCase):
         """
         result = self._run_preflight('{"permissions": {"deny": []}}')
         self.assertNotIn("refusing to run an unconstrained session", result.stdout)
+
+    def test_preflight_is_reachable_while_a_session_holds_the_default_lock(self):
+        """The regression guard for the collision described in `_run_preflight`.
+
+        Equivalent to the reviewer's reproduction, `flock
+        /tmp/alpha-lab-session.lock python -m unittest ...`, but self-contained:
+        hold the default lock, then check the scratch runner still gets past the
+        lock guard to the check under test. If `LOCKFILE` ever stops being
+        env-overridable, this fails with the exit-0 "another session" path.
+        """
+        default_lock = open("/tmp/alpha-lab-session.lock", "w")
+        self.addCleanup(default_lock.close)
+        try:
+            fcntl.flock(default_lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except OSError:
+            self.skipTest("a real session holds /tmp/alpha-lab-session.lock")
+        result = self._run_preflight(None)
+        self.assertNotIn("Another session is running", result.stdout + result.stderr)
+        self.assertIn("refusing to run an unconstrained session", result.stdout)
 
 
 if __name__ == "__main__":

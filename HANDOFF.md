@@ -73,8 +73,12 @@ journal quality, not on BL-0003.
    sessions maintain it or whether `backlog/` + `HANDOFF.md` are the state of
    record during loop-proving; until decided, sessions have been leaving it
    alone, which is the safe default.
-3. **BL-0006's scoping decision (options 1-3) is still open** and unaffected by
-   anything this session did.
+3. ~~**BL-0006's scoping decision (options 1-3) is still open.**~~ Answered
+   2026-08-09 in a supervised session: option 3. The deny rules that own the
+   core moved to `loop/agent-settings.json` and reach the unattended agent
+   through `--settings`; evidence paths and the `main`/history guardrails stay
+   repo-wide in `.claude/settings.json`. See
+   `journals/2026-08-09-deny-rule-scoping.md`.
 
 ## Time-sensitive
 

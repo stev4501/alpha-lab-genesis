@@ -14,7 +14,14 @@ SESSION_MINUTES="${SESSION_MINUTES:-90}"        # hard wall clock for the agent
 MAX_TURNS="${MAX_TURNS:-80}"
 MAX_BUDGET_USD="${MAX_BUDGET_USD:-5}"
 CLAUDE_BIN="${CLAUDE_BIN:-claude}"
-LOCKFILE="/tmp/alpha-lab-session.lock"
+# Env-overridable like everything else in this block, and for one reason: the
+# selfcheck below runs the test suite while holding this lock, so a test that
+# launches a runner of its own would deadlock against the default path and see
+# the "another session is running" exit instead of whatever it meant to test.
+# Overriding it is a test affordance, not a way to run two real sessions at
+# once — session.yml sets a fixed environment, and the agent does not control
+# the runner's.
+LOCKFILE="${LOCKFILE:-/tmp/alpha-lab-session.lock}"
 
 # Permission settings for the unattended agent. Since BL-0006 these deny rules
 # live here rather than in .claude/settings.json, which now carries only what

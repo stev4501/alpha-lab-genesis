@@ -51,6 +51,18 @@ it unwatched, instead of to every session indiscriminately.
   have kept working — and it was noticed only because `git pull` printed the
   mode change. Restored with `git update-index --chmod=+x`. Worth remembering
   before the next protected-path change goes through the API.
+- **The first version of the behavioural tests would have broken every
+  autonomous run, and passed locally while doing it.** `run_session.sh` runs
+  the selfcheck — `validate_repository.py` and the test suite — from inside its
+  own `flock` region. A test that launches a runner on the default lock path
+  therefore collides with the session running it: the child prints "another
+  session is running", exits 0, and the assertion fails. Locally the lock is
+  free, so the suite was green; under the loop it would have failed the
+  selfcheck and put every session into maintenance mode. Caught in review on
+  PR #15. `LOCKFILE` is now env-overridable, each scratch runner gets its own,
+  and a regression test holds the default lock while running the preflight.
+  Worth generalising: a test that shells out to `run_session.sh` is running
+  inside the thing it is testing, and the environment it inherits is the loop's.
 - **BL-0006's two-minute estimate for the patch handoff was low.** Step 3
   above is not the first recorded instance of a supervised session being unable
   to do the work it was convened to do — BL-0006's own observation section and
