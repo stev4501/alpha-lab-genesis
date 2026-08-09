@@ -307,7 +307,12 @@ Three ways to respond:
   facts rather than accepting an assertion.
 - (c) *Per-experiment human waiver recorded in `review.json`.*
 
-Recommendation: **(a) plus (b), and explicitly not (c).** A waiver is a bypass,
+Recommendation: **(a) plus (b), and explicitly not (c).** Concretely, that is
+one line in `PROMOTION_CHECKS`' consumer: a check passes the gate if its status
+is `"passed"` or `"not_applicable"`, and nothing else — `"not_run"`,
+`"warning"`, and `"failed"` all block, with no override. The gate stays strict
+in the sense that matters (no stamp is waivable) while not demanding that a
+one-symbol universe prove something inapplicable to it. A waiver is a bypass,
 and this change exists to delete a bypass. If a human wants to promote despite
 an unverifiable corporate-action status, the honest route is to resolve B-0003
 or to change the promotion rule deliberately in a later generation — not to
