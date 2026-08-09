@@ -6,8 +6,6 @@ loop/run_session.sh. See docs/dev-only-skills.md.
 """
 
 import json
-import os
-import subprocess
 import unittest
 from pathlib import Path
 
@@ -131,96 +129,6 @@ class TestDevPluginsStayOutOfAutonomousSessions(unittest.TestCase):
             runner, r'--disallowedTools\s+"Skill"',
             f"project settings declare plugins {list(declared)} but the runner does not remove the Skill tool",
         )
-
-    def _run_wrapper(self, *args, claude_bin="/bin/false"):
-        """Run bin/dev-session with a stubbed CLAUDE_BIN.
-
-        The stub matters. If the -p guard below were ever removed, an unstubbed
-        run would exec the real CLI and start an agent session inside the test
-        suite — spending money and hanging CI on a test whose whole point is
-        that the wrapper refuses. With the stub the worst case is a wrong exit
-        code, which fails fast. The timeout is a second backstop.
-        """
-        env = {**os.environ, "CLAUDE_BIN": claude_bin}
-        return subprocess.run(
-            [str(ROOT / "bin" / "dev-session"), *args],
-            capture_output=True, text=True, cwd=ROOT, env=env, timeout=30,
-        )
-
-    def test_dev_session_refuses_unattended_flag_forms(self):
-        """The selected print, background, and cloud flag forms are refused.
-
-        Named for what it covers. It is not "refuses every non-interactive
-        mode" — the wrapper makes no such claim, and neither should the test.
-        Claude Code 2.1.226 also treats non-TTY stdout as non-interactive, and
-        the flag surface has not proven enumerable; see docs/dev-only-skills.md
-        for the accepted trade-offs and for the layer that actually holds.
-
-        Print mode is not the only way to reach an unattended session, so this
-        covers the class. Two forms are easy to miss and both were live holes:
-        clustered short flags (`-pd`, `-dp` engage --print exactly as `-p`
-        does, so an exact-match guard misses every cluster), and the background
-        agent flags (`--bg`/`--background`, documented as starting a background
-        agent, which runs locally with the plugin loaded). `--cloud` is refused
-        on precaution. `--print=true` is currently rejected by the CLI itself
-        and is covered here so the wrapper does not depend on that.
-        """
-        self.assertTrue((ROOT / "bin" / "dev-session").is_file(), "bin/dev-session missing")
-        for flag in ("-p", "--print", "--print=true", "-pd", "-dp", "-pv",
-                     "--bg", "--background", "--cloud", "--cloud=desc",
-                     "--remote", "--remote=task"):
-            result = self._run_wrapper(flag, "noop")
-            with self.subTest(flag=flag):
-                self.assertEqual(result.returncode, 2, f"{flag} was not refused")
-                self.assertIn("refusing", result.stderr)
-
-    def test_dev_session_ignores_end_of_options_marker(self):
-        """`--` must NOT stop the scan, because Claude Code does not honour it.
-
-        This test was originally written the other way round, on the reasonable
-        assumption that `--` means end-of-options. It does not here: against
-        Claude Code 2.1.226, `claude -- --bg` starts a background session
-        rather than treating "--bg" as prompt text. Honouring the marker in the
-        wrapper would hand back exactly the bypass the guard closes.
-
-        A unit test cannot prove that claim — it runs against a stub. See the
-        version-pinned compatibility check in docs/dev-only-skills.md, which
-        must be repeated when Claude Code is upgraded.
-        """
-        for args in (("--", "--bg"), ("--bg", "--", "x"), ("--", "-p", "x")):
-            result = self._run_wrapper(*args)
-            with self.subTest(args=args):
-                self.assertEqual(
-                    result.returncode, 2,
-                    f"{args} was not refused; -- must not end the scan",
-                )
-
-    def test_dev_session_still_accepts_ordinary_flags(self):
-        """The guard must reject the selected forms, not everything.
-
-        Without this, a guard that refused every invocation would pass the test
-        above and quietly break the only supported way to use these skills.
-        /bin/true stands in for the CLI and ignores its arguments, so reaching
-        it at all is the signal.
-        """
-        for args in (
-            ("--model", "sonnet"),
-            ("--permission-mode", "plan"),   # long flag starting with p
-            ("-d",),                         # short flag without p
-            ("-c",),
-            ("--remote-control",),           # documented as interactive
-            ("--rc",),                       # its alias, likewise
-            ("-w",),
-            ("--", "some prompt text"),      # -- itself is not a rejected form
-            ("explain --bg and -p",),        # positional mentioning flags
-        ):
-            result = self._run_wrapper(*args, claude_bin="/bin/true")
-            with self.subTest(args=args):
-                self.assertEqual(
-                    result.returncode, 0,
-                    f"ordinary invocation {args} was refused: {result.stderr}",
-                )
-                self.assertNotIn("refusing", result.stderr)
 
 
 class TestVendoredPluginsGrantNoTools(unittest.TestCase):

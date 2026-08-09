@@ -55,8 +55,14 @@ The plugin is vendored at `dev/plugins/mattpocock-skills/`, which is not a
 discovery path at any level. It is loaded per-session with an explicit flag:
 
 ```bash
-bin/dev-session          # == claude --plugin-dir dev/plugins/mattpocock-skills
+bin/dev-session
+# == claude --plugin-dir dev/plugins/mattpocock-skills \
+#           --append-system-prompt-file docs/agents/session-prompt.md
 ```
+
+Both flags matter. `--plugin-dir` loads the skills; the second points them at
+their per-repo configuration in `docs/agents/`, which most of them expect to
+"have been provided" without naming a path. See `docs/agents/README.md`.
 
 `loop/run_session.sh` passes no `--plugin-dir`. Plugin skills are namespaced —
 `/mattpocock-skills:tdd` — so they cannot shadow a core skill or the bundled
@@ -288,8 +294,10 @@ kill <pid>
 ```
 
 Last verified against **2.1.226**: both behaviours confirmed. If a future
-version starts honouring `--`, drop the note above, restore the `break`, and
-reverse `test_dev_session_ignores_end_of_options_marker`.
+version starts honouring `--`, drop the note above, stop `first_refusal` at the
+marker in `bin/dev-session`, and reverse
+`TestRefusalRules.test_end_of_options_marker_does_not_stop_the_scan` in
+`tests/test_dev_session.py`.
 
 ### `claude --help` is not the authoritative flag surface
 
@@ -321,10 +329,21 @@ A blanket TTY requirement was considered and rejected. Claude Code documents
 so a TTY gate would break legitimate terminal wrappers without closing any hole
 the rules above miss.
 
-`tests/test_dev_plugins.py` covers both directions — that each refused form is
-refused, and that ordinary invocation still works. A guard that refused
-everything would otherwise pass a refusal-only test while breaking the only
-supported way to use these skills.
+`tests/test_dev_session.py` covers both directions — every refused form above
+and every allowed one, asserted against the rules directly rather than through
+a subprocess. A guard that refused everything would otherwise pass a
+refusal-only test while breaking the only supported way to use these skills.
+
+`bin/dev-session` is a small Python script rather than a shell wrapper. It
+started as three lines of bash; by the time it had a flag-class guard, a config
+pointer, and its own failure modes, every assertion about it had to go through a
+stubbed subprocess. As Python its rules are importable, which is what lets the
+flag table be exhaustive instead of representative.
+
+The rewrite was raised as a judgement call and directed by the operator, not
+taken on the implementer's initiative — the accretion was flagged, and the
+answer was to make it a script with its own tests. Recorded here because the
+diff on its own looks like scope that arrived without being asked for.
 
 This is a guardrail, not a boundary, and the distinction is load-bearing. The
 wrapper rejects **selected explicit print, background, and cloud flag forms** —
