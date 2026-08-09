@@ -18,10 +18,21 @@ Edit the right-hand column to match whatever vocabulary you actually use.
 
 ## Notes for this repo
 
-These are the defaults, kept unchanged. None of them exist in the GitHub repo
-yet, so `/triage` will create them on first use rather than reusing existing
-labels — worth knowing if you later adopt a different vocabulary, because the
-defaults will already be in place by then.
+These are the defaults, kept unchanged. Four of the five do **not** exist on
+`stev4501/alpha-lab-genesis` yet — `needs-triage`, `needs-info`,
+`ready-for-agent`, `ready-for-human`. `wontfix` does exist (GitHub creates it
+with every repository).
+
+Nothing creates the missing four for you. `/triage` applies labels; neither this
+configuration nor the triage skill defines a label-creation step, so applying a
+label that does not exist will fail. Create them once before the first triage
+run:
+
+```bash
+for l in needs-triage needs-info ready-for-agent ready-for-human; do
+  gh label create "$l" --repo stev4501/alpha-lab-genesis || true
+done
+```
 
 `ready-for-agent` means an AFK coding agent working from a GitHub issue. It does
 **not** mean the autonomous research loop: that agent works from

@@ -119,5 +119,21 @@ for dir in "${PLUGIN_DIRS[@]}"; do
   PLUGIN_ARGS+=(--plugin-dir "$dir")
 done
 
+# Point the skills at their configuration.
+#
+# Most of them say "the issue tracker should have been provided to you — run
+# /setup-matt-pocock-skills if not" and never name a path; only code-review
+# references docs/agents/issue-tracker.md directly. The setup skill's normal
+# answer is an `## Agent skills` block in CLAUDE.md or AGENTS.md, which is
+# auto-loaded project memory and would therefore also land in every autonomous
+# session. Injecting the pointer here instead reaches exactly the sessions that
+# can use these skills, and no others. See docs/agents/README.md.
+CONFIG_POINTER="Developer skill configuration for this repository is in docs/agents/: \
+issue-tracker.md (GitHub issues, and why backlog/ is a separate queue), \
+triage-labels.md, and domain.md (glossary and ADR rules). \
+Skills that expect an issue tracker, triage label vocabulary, or domain-doc \
+layout to have been provided should read those files rather than asking for \
+/setup-matt-pocock-skills to be re-run."
+
 cd "$REPO_DIR"
-exec "$CLAUDE_BIN" "${PLUGIN_ARGS[@]}" "$@"
+exec "$CLAUDE_BIN" "${PLUGIN_ARGS[@]}" --append-system-prompt "$CONFIG_POINTER" "$@"

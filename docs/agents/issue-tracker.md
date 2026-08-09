@@ -38,9 +38,14 @@ Check with `command -v gh` before assuming the CLI is available.
 
 - **Create an issue**: `gh issue create --title "..." --body "..."`. Use a
   heredoc for multi-line bodies.
-- **Read an issue**: `gh issue view <number> --comments`, filtering comments
-  with `jq` and also fetching labels — several skills branch on labels, so a
-  read that drops them is incomplete.
+- **Read an issue**: several skills branch on labels, so a read that drops them
+  is incomplete. Fetch them in the same call:
+  ```bash
+  gh issue view <number> --json number,title,body,labels,comments \
+    --jq '{number, title, body, labels: [.labels[].name], comments: [.comments[].body]}'
+  ```
+  `gh issue view <number> --comments` is fine for eyeballing an issue by hand,
+  but it returns no labels.
 - **List issues**: `gh issue list --state open --json number,title,body,labels,comments --jq '[.[] | {number, title, body, labels: [.labels[].name], comments: [.comments[].body]}]'`
   with appropriate `--label` and `--state` filters.
 - **Comment**: `gh issue comment <number> --body "..."`
@@ -71,8 +76,8 @@ Create a GitHub issue.
 
 ## When a skill says "fetch the relevant ticket"
 
-`gh issue view <number> --comments` with labels, or `mcp__github__issue_read` in
-a cloud session.
+The `gh issue view --json ... --jq ...` form above, or
+`mcp__github__issue_read` in a cloud session.
 
 ## Wayfinding operations
 

@@ -56,13 +56,18 @@ The setup skill's default assumption is that `/domain-modeling` creates and
 edits `CONTEXT.md` and ADRs lazily, as terms and decisions get resolved. That
 holds for ADRs here. It does **not** hold for the glossary.
 
-**`CONTEXT.md` is protected in three places at once:**
+**`CONTEXT.md` is protected by two enforcing layers:**
 
 | Surface | Effect |
 | :--- | :--- |
 | `.claude/settings.json` deny rules | `Edit`/`Write` on `CONTEXT.md` is refused at the point of the attempt |
 | `loop/validate_session.sh` | a session branch touching it fails the gate |
-| `CODEOWNERS` | changes require review by the operator |
+
+`CODEOWNERS` also lists it, but that is not a third layer. ADR-0009 is explicit:
+CODEOWNERS is "Convention, binding on nobody [...] permanently, since no
+required-review setting will ever activate it." Human ownership is real, but it
+rests on the two layers above plus the operator being the repository's only
+admin — not on GitHub review mechanics.
 
 So a skill that wants to change the glossary should **write the proposal to
 `core_change_requests/` and stop there**, as `loop/prompts/session.md` instructs

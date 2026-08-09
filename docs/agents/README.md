@@ -7,12 +7,15 @@ by `/mattpocock-skills:setup-matt-pocock-skills`.
 | :--- | :--- |
 | `issue-tracker.md` | `ask-matt`, `code-review`, `to-spec`, `to-tickets`, `triage`, `wayfinder` |
 | `triage-labels.md` | `triage` |
-| `domain.md` | any skill exploring the codebase — `ask-matt`, `codebase-design`, `diagnosing-bugs`, `domain-modeling`, `improve-codebase-architecture`, `tdd`, `triage`, `wait-what` |
+| `domain.md` | any skill exploring the codebase — `ask-matt`, `diagnosing-bugs`, `domain-modeling`, `improve-codebase-architecture`, `tdd`, `to-spec`, `to-tickets`, `triage`, `wait-what` |
 
-Consumer lists derived from the installed plugin at version 1.2.3 by grepping
-its skills for references to these files and to `CONTEXT.md`. They may drift on
-a plugin update; the files are read by name, so a stale list here costs nothing
-functionally.
+Consumer lists derived from the installed plugin at version 1.2.3 by reading
+each `SKILL.md` for an instruction to use the glossary, ADRs, the issue tracker,
+or the label vocabulary — not by grepping filenames, which misses `to-spec` and
+`to-tickets` (they say "the project's domain glossary" without naming
+`CONTEXT.md`) and wrongly catches `codebase-design` (the match is in a reference
+file, not an instruction). The lists may drift on a plugin update; nothing
+depends on them being current.
 
 Edit these files directly to change the configuration. Re-running the setup
 skill is only needed to switch issue trackers or start over.
@@ -41,9 +44,25 @@ declaring "issues live in GitHub Issues, triage labels are `needs-triage`/…"
 would become standing context for the research agent, contradicting the
 workflow its own prompt gives it.
 
-Nothing is lost by omitting it. The skills that need this configuration read
-`docs/agents/*.md` directly; the memory block is a convenience pointer, not a
-dependency.
+### What replaces it
+
+Something had to. Most of these skills say "the issue tracker should have been
+provided to you — run `/setup-matt-pocock-skills` if not" and never name a path;
+only `code-review` references `docs/agents/issue-tracker.md` directly. The
+memory block is how the setup skill normally provides it, so dropping it without
+a replacement would leave `to-spec`, `to-tickets`, `triage`, and `wayfinder`
+unable to find this configuration — they would ask for setup to be re-run, which
+would rewrite these files and change nothing.
+
+`bin/dev-session` supplies the pointer instead, via `--append-system-prompt`. It
+reaches exactly the sessions that can use these skills and no others: the
+autonomous runner does not invoke the wrapper, and strips skills regardless.
+`tests/test_dev_plugins.py` asserts the wrapper still carries it.
+
+The trade is that the pointer is session-scoped rather than repository-wide. A
+session started with plain `claude` rather than `bin/dev-session` gets neither
+the plugin nor the pointer — consistent, since without the plugin there are no
+skills to configure.
 
 If you later create `CLAUDE.md` or `AGENTS.md` for other reasons, keep this in
 mind before adding the block — and note that anything in those files reaches the

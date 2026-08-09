@@ -147,6 +147,24 @@ class TestDevPluginsStayOutOfAutonomousSessions(unittest.TestCase):
             capture_output=True, text=True, cwd=ROOT, env=env, timeout=30,
         )
 
+    def test_dev_session_provides_the_config_pointer(self):
+        """The wrapper must tell the skills where their configuration lives.
+
+        Most mattpocock skills expect the issue tracker and label vocabulary to
+        "have been provided" and never name a path; only code-review references
+        docs/agents/issue-tracker.md directly. The setup skill normally provides
+        it through an `## Agent skills` block in CLAUDE.md or AGENTS.md, which
+        this repository deliberately does not have — that file would be
+        auto-loaded into every autonomous session too. The wrapper injects the
+        pointer instead, so removing it silently strands the skills.
+        """
+        wrapper = (ROOT / "bin" / "dev-session").read_text(encoding="utf-8")
+        code = "\n".join(
+            line for line in wrapper.splitlines() if not line.lstrip().startswith("#")
+        )
+        self.assertIn("--append-system-prompt", code)
+        self.assertIn("docs/agents/", code)
+
     def test_dev_session_refuses_unattended_flag_forms(self):
         """The selected print, background, and cloud flag forms are refused.
 
