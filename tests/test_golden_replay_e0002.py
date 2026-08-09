@@ -29,9 +29,23 @@ identity checks still run and still have to pass.
 `CORE_MANIFEST.json` is likewise read at `design.code_commit`, because the
 evaluator requires `design.system_generation` to equal the manifest's
 generation and E-0002 ran under G-0002 while the repository is now at G-0003.
+
+`evaluator/daily_bar.py` is read from that commit too, and the module is loaded
+from the copy written into the scratch root rather than from the working tree.
+This is the same pinning applied for the same reason: the replay must run
+E-0002's evaluator. Reading the working tree would make the replay's meaning
+depend on which generation the repository happens to be at — it passes only
+while no generation has touched the evaluator, and the first one that does
+turns "is this evaluator deterministic over E-0002's inputs" into "does today's
+evaluator reproduce E-0002", a question whose answer is *expected* to be no.
+Per `CORE_MANIFEST.json`'s `change_policy`, cross-generation results are not
+comparable, so that second question is not one the replay should be asking.
+
 The replay asserts that the sealed sha256 recorded for `evaluator/daily_bar.py`
-at that commit equals the sha256 of the evaluator file being replayed, which is
-what makes "same evaluator" a checked fact rather than an assumption.
+at that commit equals the sha256 of the bytes actually replayed, which is what
+makes "same evaluator" a checked fact rather than an assumption. Pinning the
+input does not weaken that check; it is what gives the check something stable
+to be true about.
 
 `run.log` is excluded from the comparison: it embeds a wall-clock
 `finished_at`, so it is non-deterministic by construction.
@@ -130,7 +144,16 @@ class GoldenReplayE0002(unittest.TestCase):
         cls.core_bytes = git_show(cls.commit, "CORE_MANIFEST.json")
         cls._build_scratch_root()
 
-        evaluator = load_module("replay_daily_bar", ROOT / "evaluator" / "daily_bar.py")
+        # Replay E-0002's evaluator, not today's. Pinned at design.code_commit
+        # for the same reason as the two manifests above: after a generation
+        # bump the working-tree evaluator is different code, and running it
+        # against E-0002's inputs would prove nothing about E-0002.
+        cls.evaluator_bytes = git_show(cls.commit, "evaluator/daily_bar.py")
+        evaluator_path = cls.scratch / "evaluator" / "daily_bar.py"
+        evaluator_path.parent.mkdir(parents=True, exist_ok=True)
+        evaluator_path.write_bytes(cls.evaluator_bytes)
+
+        evaluator = load_module("replay_daily_bar", evaluator_path)
         cls.returned_metrics = evaluator.evaluate(cls.scratch, EXPERIMENT_ID)
 
     @classmethod
@@ -194,9 +217,9 @@ class GoldenReplayE0002(unittest.TestCase):
             for entry in component["paths"]
         }
         self.assertEqual(
-            sha256_file(ROOT / "evaluator" / "daily_bar.py"),
+            sha256_bytes(self.evaluator_bytes),
             recorded["evaluator/daily_bar.py"],
-            "The evaluator on disk is not the one E-0002 was sealed against; "
+            "The replayed evaluator is not the one E-0002 was sealed against; "
             "a replay against different bytes proves nothing about E-0002.",
         )
 

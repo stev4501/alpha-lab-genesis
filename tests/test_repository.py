@@ -359,9 +359,22 @@ class RepositoryContractTests(unittest.TestCase):
                 for record in records
             )
         )
-        self.assertEqual("G-0003", json.loads(
+        # Assert the ordering this test is named for, not the generation the
+        # repository happens to be at. Pinning the literal meant the next
+        # generation bump failed the test that exists to prove bumps are safe.
+        current = json.loads(
             (ROOT / "CORE_MANIFEST.json").read_text(encoding="utf-8")
-        )["system_generation"])
+        )["system_generation"]
+        current_number = validator.generation_number(current)
+        self.assertIsNotNone(
+            current_number, f"CORE_MANIFEST.json system_generation {current!r} is malformed"
+        )
+        self.assertGreater(
+            current_number,
+            validator.generation_number("G-0001"),
+            "The manifest has not moved past G-0001, so this test is not "
+            "exercising a generation bump at all.",
+        )
         self.assertEqual([], validator.validate(ROOT))
 
     def test_evaluation_start_is_first_executable_session(self):
