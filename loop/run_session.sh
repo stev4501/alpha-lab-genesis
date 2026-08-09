@@ -16,6 +16,14 @@ MAX_BUDGET_USD="${MAX_BUDGET_USD:-5}"
 CLAUDE_BIN="${CLAUDE_BIN:-claude}"
 LOCKFILE="/tmp/alpha-lab-session.lock"
 
+# Permission settings for the unattended agent. Since BL-0006 these deny rules
+# live here rather than in .claude/settings.json, which now carries only what
+# should bind every session in this repository regardless of supervision:
+# evidence immutability and the main/history guardrails. Everything that makes
+# the *core* human-owned — loop/, .github/, .claude/, the sealed components, and
+# the protected root files — binds the unattended agent through this file alone.
+AGENT_SETTINGS="loop/agent-settings.json"
+
 cd "$REPO_DIR"
 
 # ---------- no overlapping sessions ----------
@@ -39,6 +47,22 @@ if [[ -n "$(git status --porcelain)" ]]; then
   exit 1
 fi
 git pull --ff-only -q origin main || log "WARN: pull failed (offline?); continuing on local main."
+
+# ---------- preflight: the agent's permission settings must load ----------
+# The trade BL-0006 names explicitly: a repo-wide default cannot be forgotten,
+# an explicitly passed file can. So a missing or malformed settings file is
+# fatal here, never a warning — the runner refuses to start a session it cannot
+# constrain. What Claude Code itself does with an unreadable or malformed
+# --settings path has not been established here, so the check runs upstream of
+# the invocation, where the answer does not matter.
+if [[ ! -f "$AGENT_SETTINGS" ]]; then
+  log "FATAL: ${AGENT_SETTINGS} is missing — refusing to run an unconstrained session."
+  exit 1
+fi
+if ! python -c 'import json,sys; json.load(open(sys.argv[1]))' "$AGENT_SETTINGS" >/dev/null 2>&1; then
+  log "FATAL: ${AGENT_SETTINGS} is not valid JSON — refusing to run an unconstrained session."
+  exit 1
+fi
 
 # ---------- selfcheck decides research vs maintenance ----------
 MODE="research"
@@ -65,8 +89,17 @@ PROMPT="$(sed -e "s/{{SESSION_ID}}/${SESSION_ID}/g" \
 # allowedTools is scoped to this repository's real scripts. NOTE the space
 # before * in Bash patterns — "Bash(git add *)" matches "git add <anything>",
 # while "Bash(git add*)" would also match "git addx". PermissionRequest hooks
-# do NOT fire in -p mode; .claude/settings.json deny rules and this allowlist
-# are the only permission layers before validation.
+# do NOT fire in -p mode; the --settings deny rules and this allowlist are the
+# only permission layers before validation.
+#
+# --settings is what makes this session's constraints the *session's* rather
+# than the repository's. Deny rules from every settings source are unioned, so
+# passing this file adds the core-ownership denies on top of the repo-wide ones
+# in .claude/settings.json; nothing here weakens those. If the flag is ever
+# dropped, the session is not unbounded — the allowlist below and check 1 of
+# loop/validate_session.sh (protected paths untouched, run from main's copy)
+# still hold — but it stops failing at the point of the attempt, which is the
+# layer this file provides. The preflight above refuses to start without it.
 #
 # Two things --allowedTools does not do, both covered explicitly below.
 #
@@ -97,6 +130,7 @@ PROMPT="$(sed -e "s/{{SESSION_ID}}/${SESSION_ID}/g" \
 set +e
 timeout --signal=TERM "${SESSION_MINUTES}m" \
   "$CLAUDE_BIN" -p "$PROMPT" \
+    --settings "$AGENT_SETTINGS" \
     --allowedTools "Read,Glob,Grep,Edit,Write,Bash(git status),Bash(git status *),Bash(git add *),Bash(git commit *),Bash(git log *),Bash(git diff *),Bash(git show *),Bash(python scripts/validate_repository.py *),Bash(python scripts/validate_repository.py),Bash(python scripts/preregister_experiment.py *),Bash(python scripts/finalize_experiment.py *),Bash(python scripts/record_evidence_review.py *),Bash(python scripts/register_market_snapshot.py *),Bash(python scripts/normalize_finance_ohlcv.py *),Bash(python evaluator/daily_bar.py *),Bash(python -m pytest *),Bash(mkdir -p *)" \
     --disable-slash-commands \
     --disallowedTools "Skill" "Read(dev/plugins/**)" \
