@@ -163,6 +163,11 @@ Branch protection therefore bounds the irreversible failure — history rewritin
 machinery the agent could in principle reach. That asymmetry is accepted for
 the MVP and closed by BL-0005.
 
+**Amended 2026-08-09 by ADR-0009:** the asymmetry is permanent by decision,
+not provisional. BL-0005 is rescinded — the agent owns forward motion; the
+human owns the core. See `0009-agent-owned-operations.md` for the enforcement
+layering that supersedes the paragraph above.
+
 ## Consequences
 
 - The working tree now claims only what the loop can prove.

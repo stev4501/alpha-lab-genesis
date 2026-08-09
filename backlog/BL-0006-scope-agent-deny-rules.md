@@ -89,6 +89,13 @@ The real boundary for `main` arrives with BL-0005: once the ruleset requires a
 pull request, the server refuses every direct push regardless of spelling, and
 this enumeration should be deleted rather than maintained.
 
+**Note 2026-08-09:** BL-0005 was rescinded by ADR-0009 — no server-side push
+boundary is coming, ever, by decision. The paragraph above is therefore moot:
+the enumeration keeps its job as a supervised-session guardrail indefinitely,
+and anyone tempted to treat it as a boundary should reread the paragraph
+before it. The scoping decision (options 1–3) this item exists for remains
+open and is unaffected.
+
 ## Recommendation to evaluate, not to assume
 
 Option 3 matches the actual risk shape: evidence should be immutable to every
