@@ -7,20 +7,26 @@
   "claudeVersion": "2.1.226",
   "networkAccess": "Trusted",
   "setupScriptSha256": "5fad0741b56496a6bff1abeee362a09bc818872de412a34c561e0e26ff621c96",
-  "setupScriptDigestMatched": false,
-  "firstSessionDirectInvocation": false,
-  "firstSessionSubagentInvocation": false,
-  "firstSessionSetupRan": false,
+  "setupScriptDigestMatched": true,
+  "firstSessionDirectInvocation": true,
+  "firstSessionSubagentInvocation": true,
+  "firstSessionSetupRan": true,
   "cachedSessionDirectInvocation": false,
   "cachedSessionSetupSkipped": false,
-  "firstSessionUrl": "",
+  "firstSessionUrl": "https://claude.ai/code/session_01Ds14JPgjR8CZXMADdfPqzE",
   "cachedSessionUrl": "",
   "verifiedAt": "",
+  "firstSessionRuntimeUser": "root",
+  "firstSessionConfigDir": "/opt/alpha-lab-dev/claude-config",
+  "installedPluginVersion": "1.2.3",
+  "installedPluginPath": "/opt/alpha-lab-dev/claude-config/plugins/cache/alpha-lab-pinned/mattpocock-skills/1.2.3",
+  "directSkillHeading": "Test-Driven Development",
+  "subagentSkillHeading": "Test-Driven Development",
   "failedRuns": [
     {
       "sessionUrl": "https://claude.ai/code/session_01AkstRaVebA4tHJ8SRgssaq",
       "reason": "Cloud environment variables were not present in the pre-launch setup process; setup now exports the fixed config path internally."
     }
   ],
-  "notes": "Configure the cloud environment from docs/cloud-environment-dev-skills.md, then record first-session and cached-session evidence."
+  "notes": "First-session direct and independent subagent acceptance passed. Second new cached-session acceptance remains pending."
 }
