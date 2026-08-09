@@ -62,6 +62,20 @@ ADR-0007 approval-boundary requirements:
 7. The explicit human approval point: what the human must approve, and that
    the agent stops there.
 
+## Input from BL-0001 (2026-08-09), to weigh not to assume
+
+The golden replay found that `metrics.json` is not bit-reproducible across
+CPython minor versions: `turnover` is the one metric computed through `sum()`
+over a long float list, and 3.12 changed that to compensated summation. E-0002
+was recorded on >= 3.12; the loop runner pins 3.11. `design.environment_id` is
+free text (`"python-stdlib-mvp"`) and no interpreter version is recorded or
+enforced anywhere. See the "Outcome 2026-08-09" section of
+`backlog/BL-0001-golden-replay-e0002.md` for the evidence.
+
+Decide, when drafting the request, whether pinning/recording the interpreter
+belongs in the G-0004 scope or is a separate smaller change. Argue it either
+way, but do not leave it unmentioned.
+
 ## Definition of done
 
 The request document exists, is complete per the list above, is referenced
