@@ -51,9 +51,12 @@ alpha-lab-genesis/
 └── tests/                      repository contract tests
 ```
 
-Skills under `dev/plugins/` are for supervised development only and are never
-loaded by autonomous sessions. Start a session with them using
-`bin/dev-session`; see `docs/dev-only-skills.md`.
+Third-party skills under `dev/plugins/` are for development, not for the
+autonomous loop. `bin/dev-session` loads them in a local terminal; they are not
+available in cloud or web sessions, and `docs/dev-only-skills.md` records why
+and what was tried. The loop's runner strips skills outright
+(`--disable-slash-commands`, `--disallowedTools "Skill"`), which is what would
+keep them unusable there if a delivery route is ever found.
 
 ## Source-of-Truth Rules
 

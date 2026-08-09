@@ -23,9 +23,16 @@ denies `Read(dev/plugins/**)`, so they do not enter context as prose either;
 "never loaded as skills, never invokable, not readable whole" — see
 `docs/dev-only-skills.md`.
 
+**Note 2026-08-09:** `--plugin-dir` cannot reach cloud or web sessions, so these
+skills are unavailable there. Declaring the plugin in `.claude/settings.json`
+was tried and disproved by a cloud-session probe — the declaration installs
+nothing — and was removed rather than left asserting a capability the repository
+does not have. See `docs/dev-only-skills.md` for the evidence and the remaining
+options.
+
 `tests/test_dev_plugins.py` asserts the invariants that keep it that way:
-`.claude/skills/` does not exist, `.claude/settings.json` declares no
-`enabledPlugins`, `run_session.sh` passes no `--plugin-dir`/`--plugin-url`,
+`.claude/skills/` does not exist, a declared `enabledPlugins` is accompanied by
+the runner controls, `run_session.sh` passes no `--plugin-dir`/`--plugin-url`,
 no nested `.claude/` tree exists under `dev/plugins/`, and no vendored skill
 ships hooks, MCP servers, `allowed-tools`, or executables.
 
@@ -82,9 +89,10 @@ omitting it from `--allowedTools` does not keep skills away from the session
 agent, and a discoverable skill's description would occupy the agent's context
 regardless of whether it were ever invoked.
 
-Nothing is discoverable today, so this is a latent gap rather than a live hole.
-It becomes live the moment anyone adds `.claude/skills/`, sets `enabledPlugins`,
-or installs a user-level plugin on a machine that runs `run_session.sh` locally.
+This remains a latent gap rather than a live hole, because nothing declares
+these skills to any session. It stops being latent the moment a delivery route
+for cloud sessions is found — any route that reaches them also reaches the loop
+— so the controls below are what would carry the weight, not this flag.
 
 ### Why it costs the loop nothing
 
