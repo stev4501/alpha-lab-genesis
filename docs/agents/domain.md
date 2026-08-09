@@ -31,7 +31,7 @@ hypothesis, a test name — use the term as defined in `CONTEXT.md`.
 
 This repo is stricter than most about this, and `CONTEXT.md` says so explicitly.
 It carries a **Banned Synonyms** section listing terms that must not be used:
-`proven winner` (say "champion at &lt;evidence stage&gt;"), `test set` for market
+`proven winner` (say "champion at <evidence stage>"), `test set` for market
 confirmation data, `backtest result` without naming the evidence stage and data
 snapshot, `profit` without stating gross/net/realized/simulated, `backtest
 start` for return measurement (say "evaluation start"). Read that section before
