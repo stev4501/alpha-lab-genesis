@@ -69,3 +69,8 @@ The loop is proved when all five have been demonstrated:
 5. One full human-approval round trip: the agent files the validity-stamp
    change request (BL-0002), the human approves, a sealed G-0004 lands, and
    the agent resumes under it. — not attempted
+
+## SESSION 2026-08-09-0505 FAILED VALIDATION
+Branch preserved at failed/2026-08-09-0505. First failed check:
+FAIL: HANDOFF.md not updated
+Next session: treat this as maintenance input.
