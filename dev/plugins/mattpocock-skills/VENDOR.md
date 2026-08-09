@@ -54,11 +54,11 @@ in a repository whose integrity rules are enforced by convention as well as by
 
 ## Relationship to the marketplace copy
 
-Cloud sessions use the inline `alpha-lab-pinned` marketplace declared in
-`.claude/settings.json`. Its HTTPS Git source is pinned directly to the full
-commit above, so the repository controls both delivery routes. The official
-Anthropic marketplace is not part of this path and cannot silently advance the
-cloud copy.
+The proposed cloud route uses the inline `alpha-lab-pinned` marketplace declared
+in `.claude/settings.json`. Its HTTPS Git source is pinned directly to the full
+commit above, so a successful cloud installation would resolve the reviewed
+upstream commit rather than inherit the mutable official marketplace. Automatic
+cloud installation remains pending in `.claude/cloud-plugin-acceptance.json`.
 
 `tests/test_dev_plugins.py` asserts that the inline source, vendored provenance,
 and autonomous override retain the same plugin ID and SHA.

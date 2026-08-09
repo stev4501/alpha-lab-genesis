@@ -69,7 +69,7 @@ their per-repo configuration in `docs/agents/`, which most of them expect to
 `/mattpocock-skills:tdd` — so they cannot shadow a core skill or the bundled
 `/code-review`.
 
-### Cloud and web sessions: pinned inline marketplace
+### Proposed cloud route: pinned inline marketplace
 
 `--plugin-dir` only works where the caller controls the launch. Cloud sessions
 instead use the repository plugin mechanism documented by Claude Code:
@@ -106,23 +106,35 @@ to the same full upstream SHA as the vendored tree:
 }
 ```
 
-The explicit HTTPS URL matters. Claude Code's GitHub shorthand clones over SSH
-by default; a clean environment without a trusted GitHub host key cannot install
-it. The HTTPS source installed successfully from an empty `CLAUDE_CONFIG_DIR`
-and recorded `gitCommitSha` as the expected SHA. The same clean-state probe then
-listed the installed plugin as `enabled: true` under project settings and
-`enabled: false` when Claude Code was launched with
-`--settings loop/agent-settings.json`.
+The explicit HTTPS URL removes dependence on SSH host-key and credential setup.
+One clean local probe of GitHub shorthand selected SSH and failed host-key
+verification; another environment succeeded, so the behavior is not treated as
+universal. HTTPS is retained because it worked without either dependency.
+
+A clean local probe first let session startup register the inline marketplace,
+then ran an explicit `claude plugin install`. That install succeeded, recorded
+the expected `gitCommitSha`, and proved the source resolves. It did **not** prove
+that the declaration auto-installs. After explicit installation, project
+settings listed the plugin as `enabled: true`, while
+`--settings loop/agent-settings.json` listed it as `enabled: false`. That proves
+settings precedence for an installed plugin, not cloud delivery.
 
 These probes used Claude Code 2.1.226. Repeat them when the operational CLI
 version changes; the unit tests verify configuration structure but do not
 exercise marketplace download or settings resolution.
 
 The earlier failed cloud experiment declared only
-`mattpocock-skills@claude-plugins-official`. A clean cloud session had no known
-marketplaces, so the plugin ID had nothing to resolve against. The inline
-marketplace supplies that missing half without relying on developer-local plugin
-state.
+`mattpocock-skills@claude-plugins-official`. Preserve its negative evidence:
+
+| Probe | Fresh cloud result |
+| :--- | :--- |
+| skills matching `mattpocock` | **NONE** |
+| `cat ~/.claude/plugins/installed_plugins.json` | file absent |
+| `ls ~/.claude/plugins/marketplaces` | directory absent |
+| invoke `/mattpocock-skills:tdd` | `Unknown skill` |
+
+The proposed inline marketplace supplies the missing marketplace definition,
+but automatic cloud installation remains unproven until the acceptance below.
 
 Cloud installation is still an external integration seam. Before this change is
 merged, start a completely new cloud session on the branch using a cloud
@@ -141,10 +153,11 @@ prompt, and verify:
 Do not use a resumed session for this acceptance check; plugin registration
 happens at session startup.
 
-Record the result in `.claude/cloud-plugin-acceptance.json`. Its contract test
-deliberately fails while `status` is `pending`; change it to `verified` only
-after recording the environment name, cloud session URL, verification time,
-installed SHA, and successful direct and subagent invocations. Because
+Record the result in `.claude/cloud-plugin-acceptance.json`. Standard repository
+tests skip while `status` is `pending`, so autonomous session validation stays
+green. The separate `cloud-plugin-acceptance` pull-request workflow remains red
+until the receipt records the environment name, cloud session URL, verification
+time, installed SHA, and successful direct and subagent invocations. Because
 `.claude/` is human-owned under ADR-0009, the autonomous loop cannot satisfy its
 own release gate.
 
@@ -180,10 +193,10 @@ skills away from an autonomous session; if a skill were discoverable, the agent
 could invoke it, and its description would sit in the agent's context either
 way.
 
-The cloud declaration makes this an active boundary rather than a latent one.
-Project settings enable the plugin for ordinary developer sessions. The
-autonomous runner's explicit settings file disables the exact plugin ID, and
-the feature- and tool-level controls below remain independent backstops.
+If the cloud acceptance succeeds, project settings will make this an active
+boundary rather than a latent one. The autonomous runner's explicit settings
+file disables the exact plugin ID, and the feature- and tool-level controls
+below remain independent backstops.
 
 ## The applied backstop
 

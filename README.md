@@ -53,8 +53,9 @@ alpha-lab-genesis/
 
 Third-party skills under `dev/plugins/` are for development, not for the
 autonomous loop. `bin/dev-session` loads them in a local terminal; cloud
-sessions are configured to receive the same reviewed SHA through the pinned
-inline marketplace in `.claude/settings.json`. Merge is blocked until
+delivery through the pinned inline marketplace in `.claude/settings.json`
+remains proposed until a fresh cloud session proves automatic installation.
+Merge is blocked by the PR-only acceptance check until
 `.claude/cloud-plugin-acceptance.json` records a successful fresh-cloud and
 subagent check. The autonomous runner disables that exact plugin in
 `loop/agent-settings.json` and strips skills outright

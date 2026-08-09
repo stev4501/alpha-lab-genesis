@@ -1,0 +1,24 @@
+name: cloud-plugin-acceptance
+
+on:
+  pull_request:
+    paths:
+      - ".claude/cloud-plugin-acceptance.json"
+      - ".claude/settings.json"
+      - "loop/agent-settings.json"
+      - "scripts/validate_cloud_plugin_acceptance.py"
+      - "tests/test_cloud_plugin_acceptance.py"
+      - ".github/workflows/cloud-plugin-acceptance.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  acceptance:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: python scripts/validate_cloud_plugin_acceptance.py
