@@ -2,7 +2,7 @@
 
 - Origin: explicit operator request after two fresh sessions disproved PR #17's
   repository-declaration approach.
-- Status: **draft, blocked on first-session and cached-session acceptance**.
+- Status: **cloud acceptance verified; ready for supervised merge review**.
 - Protected paths: `.claude/`, `.github/`, and `scripts/`.
 - Record patch:
   `core_change_requests/patches/2026-08-09-cloud-environment-dev-skills-protected-paths.diff`.
@@ -56,6 +56,18 @@ The workflow is not a server-enforced required check. ADR-0009 deliberately
 removes that class of PR gate. The protected receipt and failing check make the
 state explicit, while the operator remains responsible for keeping the PR draft
 and unmerged until acceptance succeeds.
+
+### Acceptance evidence
+
+Acceptance completed on 2026-08-09:
+
+| Run | Session | Result |
+| :--- | :--- | :--- |
+| First fresh session | `https://claude.ai/code/session_01Ds14JPgjR8CZXMADdfPqzE` | setup ran; pinned plugin enabled; direct and independent subagent TDD invocation passed |
+| Second new session | `https://claude.ai/code/session_01JSgKixanpWvb426EaYRg7M` | provisioning omitted setup; cached plugin remained enabled at the same SHA; direct TDD invocation passed |
+
+The protected receipt is `verified`, the PR-only acceptance validator exits
+zero, and the standard suite has no skip.
 
 ## Scope
 
