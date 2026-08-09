@@ -4,10 +4,12 @@
   by `workflow_dispatch` and observed that the branch was still on the remote
   when the session ended
 - Status: **proposed** — nothing applied. Patch attached and verified.
+  Revised 2026-08-09 after review round 1 on PR #13; see "Review round 1".
 - Requires sealed changes: no
 - Requires protected-path changes: yes (`loop/`, `.github/`) — human applies
 - Related: `docs/adr/0008-mvp-reduction.md` (exit criterion 2),
   `docs/adr/0009-agent-owned-operations.md` ("The human owns the core"),
+  `README.md` ("Source-of-Truth Rules"),
   `core_change_requests/2026-08-08-pr-mode-loop.md` ("Open questions for the
   human" → *Branch cleanup*)
 
@@ -58,7 +60,9 @@ Two new files, both attached as one patch
 - **`loop/prune_branches.sh`** — enumerates the remote with the refspec
   `refs/heads/failed/*` and nothing else, then applies two windows:
   `EMPTY_RETENTION_DAYS` (default 7) to branches holding no commits `main`
-  lacks, `WORK_RETENTION_DAYS` (default 90) to branches that do.
+  lacks, and `WORK_RETENTION_DAYS` to branches that do. **That second window
+  defaults to 0, meaning never** — out of the box this deletes only branches
+  that hold nothing. See review finding 1 below for why.
 - **`.github/workflows/prune-session-branches.yml`** — `workflow_dispatch`
   only, defaulting to a dry run, with the `schedule` block present but
   commented out. That mirrors `session.yml`'s own comment: a human enables the
@@ -116,22 +120,107 @@ of.
 ADR-0008 requires that one induced validation failure salvage correctly, with
 rejected work quarantined to a `failed/` branch. A retention window does not
 weaken that: the criterion is a statement about what happens at failure time.
-But it does mean the demonstration should be evidenced in the journal and the
-handoff, not by pointing at a branch that a later prune may collect. Worth
-being explicit, since criterion 2 is still unattempted.
+Under the shipped default the question is moot — the criterion-2 branch will
+carry work, and work-bearing branches are never deleted. It matters only if
+`WORK_RETENTION_DAYS` is ever raised, and then the demonstration should be
+evidenced in the journal and the handoff rather than by pointing at a branch a
+later prune may collect. Worth stating, since criterion 2 is still unattempted.
+
+## Review round 1 (PR #13, 2026-08-09)
+
+Five findings. Three were real defects in the first draft, one changed the
+default posture, and one was a style point taken as offered. All are fixed in
+the attached patch.
+
+### 1. Deleting work-bearing branches contradicts a source-of-truth rule
+
+`README.md:65` states, under *Source-of-Truth Rules*: "Failed and discarded
+experiments are retained." A `failed/<id>` branch carrying commits is the only
+copy of the artifacts that session produced — its journal on `main` records
+what happened, not what was made. A 90-day default therefore proposed erasing
+retained evidence on a timer, which is not this request's job to decide.
+
+`WORK_RETENTION_DAYS` now defaults to **0, meaning never**. The default
+posture deletes only branches holding no commits `main` lacks, which is both
+the observed problem and the case where nothing can be lost. The window
+remains implemented and tested, so raising it is a one-line change once the
+README rule is amended — but that amendment is a human decision, and the
+default no longer presumes it.
+
+### 2. Deletion read stale state and deleted by name (real, and the dangerous one)
+
+The first draft fetched, then ignored the SHA `git ls-remote` returned,
+evaluated the tracking ref, and deleted by branch name with no lease. A branch
+that gained work between fetch and delete would have been deleted on the
+strength of a judgement made about a different commit — including its journal
+check.
+
+The enumerated SHA is now the authority for the whole run, and deletion goes
+through `--force-with-lease=refs/heads/<branch>:<sha>`. If the branch moved,
+the remote refuses and the work survives to be re-evaluated next run.
+
+### 3. A branch with no local tracking ref aborted the entire job
+
+Under `set -euo pipefail`, `git rev-list --count origin/main..origin/failed/X`
+on a branch absent from the local clone exits 128 and takes the job down —
+verified, not inferred. Any branch created between the fetch and the
+enumeration triggered it, and one unlucky branch stopped every other branch
+from being evaluated. The script now checks the enumerated commit is in hand
+with `git cat-file -e` and keeps the branch if it is not.
+
+### 4. Uncommenting the schedule silently disabled the manual trigger
+
+Worse than a duplicate key. The commented block sat at column 0, so
+uncommenting it produced a second top-level `on:` — and YAML keeps the last
+one. Parsing the uncommented file yields `{'schedule': ...}` alone: the
+`workflow_dispatch` trigger, and with it the `dry_run` input, silently
+vanishes, leaving a scheduled pruner that deletes for real with no manual
+trigger and no way to dry-run it. The commented `schedule:` is now nested
+under the existing `on:` mapping, with a comment saying why it must stay
+there.
+
+### 5. Duplicated keep paths
+
+Three paths repeated log/increment/continue. Folded into a `keep()` helper;
+the four keep paths that now exist each read as one line.
 
 ## Verification
 
-`loop/prune_branches.sh` passes `bash -n`, and was exercised against a
-synthetic remote carrying one branch of each shape. Every decision path fired,
-and `main` and `unmerged/*` were untouched by both the dry and the live run:
+`loop/prune_branches.sh` passes `bash -n`. It was exercised against a
+synthetic remote carrying one branch of each shape, with the two race
+conditions injected by a `git` shim rather than argued about. `main` and
+`unmerged/*` were untouched in every run.
+
+Default posture — only the empty branch is eligible:
 
 ```
-DELETE failed/2020-01-01-0101 — no unique commits, 2412d old, past 7d
-DELETE failed/2020-02-02-0202 — 1 unique commit(s), 2380d old, past 90d
-KEEP   failed/2020-03-03-0303 — 1 unique commit(s), 2350d old, but journals/2020-03-03-0303.md is absent from main
+WOULD  failed/2020-01-01-0101 — no unique commits, 2412d old, past 7d
+KEEP   failed/2020-02-02-0202 — 1 unique commit(s); WORK_RETENTION_DAYS=0 retains rejected work indefinitely
+KEEP   failed/2020-03-03-0303 — 1 unique commit(s); WORK_RETENTION_DAYS=0 retains rejected work indefinitely
 KEEP   failed/hand-made — name carries no parseable session id
-Deleted 2 branch(es), kept 2.
+Dry run: 1 branch(es) would be deleted, 3 kept.
+```
+
+Opt-in (`WORK_RETENTION_DAYS=90`) — the journal guard still binds:
+
+```
+WOULD  failed/2020-02-02-0202 — 1 unique commit(s), 2380d old, past 90d
+KEEP   failed/2020-03-03-0303 — 1 unique commit(s), 2350d old, but journals/2020-03-03-0303.md is absent from main
+```
+
+Enumerated commit absent locally (finding 3; previously exit 128 for the whole
+job) — now a keep, exit 0:
+
+```
+KEEP   failed/2020-02-02-0202 — commit 639fee80 not present locally; state moved under us
+```
+
+Branch gains work between enumeration and delete, injected live during a
+`DRY_RUN=false` run (finding 2) — the lease refuses and the work survives:
+
+```
+KEEP   failed/2020-01-01-0101 — lease on 3bc53288 was stale; branch moved since enumeration
+Deleted 0 branch(es), kept 4.
 ```
 
 Run unmodified against this repository's real remote in dry-run mode, it
@@ -152,18 +241,24 @@ flips the next session into maintenance mode.
 
 ## For the human to decide
 
-1. **The windows.** 7 days for empty, 90 for work-carrying, are proposals, not
-   findings. They are environment variables in the workflow; changing them is
-   a one-line edit and needs no code change.
-2. **Whether to enable the schedule.** Shipping it commented out follows
+1. **Whether rejected work is ever deleted at all.** This is the live one.
+   `README.md:65` retains failed and discarded experiments, so
+   `WORK_RETENTION_DAYS` ships at 0 and work-bearing `failed/*` branches are
+   kept forever. Raising it needs that rule amended first — or the branch
+   contents archived somewhere durable before deletion, which is a larger
+   change than this request and is not proposed here. Leaving it at 0 is a
+   complete answer; the loop's actual clutter is the empty branches.
+2. **The empty window.** 7 days is a proposal, not a finding. It is an
+   environment variable in the workflow; changing it is a one-line edit.
+3. **Whether to enable the schedule.** Shipping it commented out follows
    `session.yml`'s precedent. At the current rate — two dispatches, one
    failure — the manual path is honestly sufficient, and the schedule can wait
    until sessions run unattended.
-3. **Where the policy is recorded.** This document records the reasoning, but
+4. **Where the policy is recorded.** This document records the reasoning, but
    a retention rule is a governance statement about evidence, and ADR-0008's
    exit criterion 2 is the text a future reader will land on. A one-paragraph
    amendment there, or an ADR-0010, would put it where it is looked for.
-4. **`failed/2026-08-09-0505` specifically.** It is independent of all of the
+5. **`failed/2026-08-09-0505` specifically.** It is independent of all of the
    above. It holds nothing, `HANDOFF.md` says so, and deleting it by hand today
    costs nothing and waits on no approval.
 

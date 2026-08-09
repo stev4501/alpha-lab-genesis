@@ -1,14 +1,15 @@
 diff --git a/.github/workflows/prune-session-branches.yml b/.github/workflows/prune-session-branches.yml
 new file mode 100644
-index 0000000..b399fe2
+index 0000000..b852724
 --- /dev/null
 +++ b/.github/workflows/prune-session-branches.yml
-@@ -0,0 +1,46 @@
+@@ -0,0 +1,56 @@
 +name: prune-session-branches
 +
-+# Manual trigger only for now. The schedule below is intentionally commented
-+# out, exactly as session.yml was: a human enables it after workflow_dispatch
-+# runs prove the rules select the branches they are meant to and nothing else.
++# Manual trigger only for now. The schedule below is intentionally left
++# commented, exactly as session.yml was: a human enables it after
++# workflow_dispatch runs prove the rules select the branches they are meant to
++# and nothing else.
 +#
 +# The dispatch input defaults to a dry run. On the schedule event `inputs` is
 +# empty, so the guarded expression below evaluates to false and a scheduled run
@@ -21,16 +22,21 @@ index 0000000..b399fe2
 +        description: "List what would be deleted without deleting it"
 +        type: boolean
 +        default: true
-+# on:
-+#   schedule:
-+#     - cron: "17 4 * * 0"      # Sundays 04:17 UTC, well clear of any session
++
++  # To enable weekly pruning, uncomment the two lines below. They belong HERE,
++  # nested under this same `on:` mapping. A second top-level `on:` key does not
++  # merge with this one — YAML keeps the last, which would silently drop the
++  # workflow_dispatch trigger above and leave a scheduled pruner with no manual
++  # trigger and no dry-run default.
++  # schedule:
++  #   - cron: "17 4 * * 0"      # Sundays 04:17 UTC, well clear of any session
 +
 +concurrency:
 +  group: prune-session-branches   # NOT the research-session group: pruning must
 +  cancel-in-progress: false       # never queue behind a 110-minute session
 +
 +permissions:
-+  contents: write                 # required for `git push origin --delete`
++  contents: write                 # required to delete a remote branch
 +
 +jobs:
 +  prune:
@@ -48,14 +54,18 @@ index 0000000..b399fe2
 +        env:
 +          DRY_RUN: ${{ inputs.dry_run == true }}
 +          EMPTY_RETENTION_DAYS: "7"
-+          WORK_RETENTION_DAYS: "90"
++          # 0 = never delete a failed branch that carries commits main lacks.
++          # Raising this opts into deleting rejected work and contradicts
++          # README.md's "Failed and discarded experiments are retained" until
++          # that rule is amended.
++          WORK_RETENTION_DAYS: "0"
 +        run: bash loop/prune_branches.sh
 diff --git a/loop/prune_branches.sh b/loop/prune_branches.sh
 new file mode 100755
-index 0000000..6da1d6f
+index 0000000..bd75baf
 --- /dev/null
 +++ b/loop/prune_branches.sh
-@@ -0,0 +1,105 @@
+@@ -0,0 +1,142 @@
 +#!/usr/bin/env bash
 +# prune_branches.sh — retention policy for the branches run_session.sh leaves
 +# on the remote. Lives in loop/ (protected). The session agent never edits this
@@ -76,12 +86,20 @@ index 0000000..6da1d6f
 +#
 +# Everything not matching refs/heads/failed/* is out of scope by construction:
 +# the remote is enumerated with that refspec and nothing else.
++#
++# DEFAULT POSTURE: only branches carrying no commits main lacks are deleted.
++# README.md's source-of-truth rules say failed and discarded experiments are
++# retained, and a work-bearing failed/<id> is the only copy of the artifacts a
++# session produced — its journal on main records what happened, not what was
++# made. So WORK_RETENTION_DAYS defaults to 0, meaning never. Setting it to a
++# positive number opts into deleting rejected work and needs that README rule
++# amended first.
 +
 +set -euo pipefail
 +
 +DRY_RUN="${DRY_RUN:-true}"
 +EMPTY_RETENTION_DAYS="${EMPTY_RETENTION_DAYS:-7}"
-+WORK_RETENTION_DAYS="${WORK_RETENTION_DAYS:-90}"
++WORK_RETENTION_DAYS="${WORK_RETENTION_DAYS:-0}"   # 0 = retain work-bearing forever
 +
 +cd "${REPO_DIR:-$(git rev-parse --show-toplevel)}"
 +
@@ -98,21 +116,39 @@ index 0000000..6da1d6f
 +    || date -u -j -f "%Y-%m-%d %H:%M:%S" "$stamp" +%s 2>/dev/null
 +}
 +
++kept=0
++removed=0
++keep() { echo "KEEP   $1 — $2"; kept=$((kept + 1)); }
++
++# Enumerate BEFORE fetching, and treat the enumerated sha as the authority for
++# the rest of the run. Reading state from a tracking ref instead would mean
++# judging one commit and deleting whatever the name points at later.
++mapfile -t REMOTE_REFS < <(git ls-remote --heads origin "refs/heads/failed/*")
++
 +git fetch -q origin main
 +git fetch -q origin "+refs/heads/failed/*:refs/remotes/origin/failed/*"
 +
 +NOW="$(date -u +%s)"
-+removed=0
-+kept=0
 +
-+while read -r _sha ref; do
-+  [[ -n "${ref:-}" ]] || continue
++for line in "${REMOTE_REFS[@]}"; do
++  [[ -n "$line" ]] || continue
++  sha="${line%%$'\t'*}"
++  ref="${line#*$'\t'}"
 +  branch="${ref#refs/heads/}"
 +  id="${branch#failed/}"
 +
++  # The enumerated commit must be in hand before anything is judged by it. A
++  # branch force-updated between the enumeration and the fetch leaves us
++  # holding a sha we cannot read; so does a fetch that raced a new branch.
++  # Either way this is a keep, not an abort — without this guard the missing
++  # object makes rev-list fail and set -e takes down the whole job.
++  if ! git cat-file -e "${sha}^{commit}" 2>/dev/null; then
++    keep "$branch" "commit ${sha:0:8} not present locally; state moved under us"
++    continue
++  fi
++
 +  if ! created="$(session_epoch "$id")"; then
-+    echo "KEEP   ${branch} — name carries no parseable session id"
-+    kept=$((kept + 1))
++    keep "$branch" "name carries no parseable session id"
 +    continue
 +  fi
 +  age_days=$(( (NOW - created) / 86400 ))
@@ -120,7 +156,7 @@ index 0000000..6da1d6f
 +  # Commits this branch has that main does not. Zero means every commit on it
 +  # is already on main: the branch is a bare pointer holding no forensic
 +  # record, which is what a session that died before producing a commit leaves.
-+  unique="$(git rev-list --count "origin/main..origin/${branch}")"
++  unique="$(git rev-list --count "origin/main..${sha}")"
 +
 +  if [[ "$unique" -eq 0 ]]; then
 +    limit="$EMPTY_RETENTION_DAYS"
@@ -128,11 +164,14 @@ index 0000000..6da1d6f
 +  else
 +    limit="$WORK_RETENTION_DAYS"
 +    what="${unique} unique commit(s)"
++    if [[ "$limit" -le 0 ]]; then
++      keep "$branch" "${what}; WORK_RETENTION_DAYS=0 retains rejected work indefinitely"
++      continue
++    fi
 +  fi
 +
 +  if [[ "$age_days" -lt "$limit" ]]; then
-+    echo "KEEP   ${branch} — ${what}, ${age_days}d old, retained ${limit}d"
-+    kept=$((kept + 1))
++    keep "$branch" "${what}, ${age_days}d old, retained ${limit}d"
 +    continue
 +  fi
 +
@@ -142,19 +181,27 @@ index 0000000..6da1d6f
 +  # leaves the branch as the only record of the session. Absent journal =>
 +  # keep forever and let a human decide.
 +  if [[ "$unique" -ne 0 ]] && ! git cat-file -e "origin/main:journals/${id}.md" 2>/dev/null; then
-+    echo "KEEP   ${branch} — ${what}, ${age_days}d old, but journals/${id}.md is absent from main"
-+    kept=$((kept + 1))
++    keep "$branch" "${what}, ${age_days}d old, but journals/${id}.md is absent from main"
 +    continue
 +  fi
 +
 +  if [[ "$DRY_RUN" == "true" ]]; then
 +    echo "WOULD  ${branch} — ${what}, ${age_days}d old, past ${limit}d"
 +  else
-+    git push -q origin --delete "$branch"
-+    echo "DELETE ${branch} — ${what}, ${age_days}d old, past ${limit}d"
++    # Delete under a lease on the exact commit that was judged. If the branch
++    # moved since enumeration, the remote refuses and the work survives to be
++    # re-evaluated — including its journal check — on the next run.
++    if git push -q origin \
++         --force-with-lease="refs/heads/${branch}:${sha}" \
++         --delete "refs/heads/${branch}" 2>/dev/null; then
++      echo "DELETE ${branch} — ${what}, ${age_days}d old, past ${limit}d"
++    else
++      keep "$branch" "lease on ${sha:0:8} was stale; branch moved since enumeration"
++      continue
++    fi
 +  fi
 +  removed=$((removed + 1))
-+done < <(git ls-remote --heads origin "refs/heads/failed/*")
++done
 +
 +if [[ "$DRY_RUN" == "true" ]]; then
 +  echo "Dry run: ${removed} branch(es) would be deleted, ${kept} kept."
