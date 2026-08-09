@@ -5,7 +5,8 @@
 - Requires sealed changes: no
 - Requires protected-path changes: yes (`loop/`, and optionally `.claude/`) —
   human applies
-- Related: `backlog/BL-0006-scope-agent-deny-rules.md`, `docs/dev-only-skills.md`
+- Related: `backlog/BL-0006-scope-agent-deny-rules.md`, `docs/adr/0009-agent-owned-operations.md`,
+  `docs/dev-only-skills.md`
 
 ## What was done without touching protected paths
 
@@ -114,26 +115,53 @@ Applying the `validate_session.sh` half alone would let a session burn 90
 minutes and then fail the gate for a change it was never warned off. Apply both
 halves or neither.
 
-## Rebased onto PR-mode
+## Part A applies in either PR-mode state
 
-The BL-0005 PR-mode runner patch landed on main in #5 (`1fdd47f`), which
-rewrote 93 lines of `loop/run_session.sh` — the file Part A targets. Part A has
-been **regenerated against post-#5 `main`** and now applies exactly, with no
-line offsets. Its hunks sit at lines 93 and 113, inside the `claude -p`
-invocation PR-mode left structurally intact.
+`loop/run_session.sh` has moved twice under this request. PR-mode landed in #5
+(`8906f4f`), rewriting 93 lines; ADR-0009 then rescinded BL-0005 and left
+`patches/2026-08-09-rescind-pr-mode.diff` pending, which reverts it. Part A
+targets the `claude -p` invocation, which both states leave structurally
+intact, so it was tested against both rather than pinned to one:
 
-Earlier revisions of this document described composing Part A with a
-then-unapplied PR-mode patch. That is now history: PR-mode is applied, and the
-patch in `patches/` targets the current file. Nothing about the change itself
-moved — still one `--disallowedTools "Skill"`, positioned directly after
-`--allowedTools`.
+| Runner state | Part A result |
+| :--- | :--- |
+| PR-mode applied (current `main`) | applies exactly, hunks at 93 and 113 |
+| Rescind patch applied first | applies, hunks offset −25, back at 68 and 88 |
 
-Note that #5 also added `.github/workflows/session-validate.yml`, which runs the
-session gate on pull requests to `main`. It classifies by head ref: `session/*`
-gets the full validator, `salvage/*` a narrative-only check, and anything else
-is passed through as "governed by review". Part A does not interact with it —
-the workflow reads `validate_session.sh` from the base ref, and Part A does not
-touch that file.
+Both parse under `bash -n` and yield exactly one `--disallowedTools "Skill"`
+directly after `--allowedTools`. **Apply Part A before or after the rescind
+patch; no regeneration needed either way.** `git apply` prints "Hunk N
+succeeded at M (offset −25 lines)" in the post-rescind case — expected, not a
+warning to act on.
+
+### ADR-0009 raises the stakes on the finding above
+
+ADR-0009 supersedes ADR-0008's "Enforcement reality" and names three layers.
+The second is:
+
+> **Runner-side, binding on the unattended agent:** the `--allowedTools`
+> allowlist, the `.claude/settings.json` deny rules, and the validator executed
+> from `main`'s copy rather than the branch under test. [...] That is no longer
+> an accepted MVP deficiency awaiting closure. It is the design.
+
+That promotes `--allowedTools` from an incidental flag to one of three
+deliberate enforcement layers. The finding in this request is a caveat on
+exactly that layer, and it is worth stating in the ADR's own terms:
+`--allowedTools` binds the unattended agent **for permission-gated tools only**.
+`Bash`, `Edit`, and `Write` are permission-gated, so the layer does the work the
+ADR assigns it for every tool the runner currently reasons about. It does not
+bind tools that execute without a permission prompt, and `Skill` is one.
+
+This does not weaken ADR-0009's decision — the split of ownership stands on its
+own reasoning. It means the runner-side layer needs `--disallowedTools` to
+cover the non-gated class, which is what Part A adds. If the enforcement-by-
+layer section is ever restated, "the `--allowedTools` allowlist" is more
+accurate as "the `--allowedTools` allowlist and `--disallowedTools` removals".
+
+`BL-0006`'s 2026-08-09 note records that the push-deny enumeration keeps its
+guardrail job indefinitely now that no server-side boundary is coming. The
+distinction that note draws — guardrail versus boundary — is the same one at
+work here, applied to a different flag.
 
 ## How to apply
 
@@ -147,7 +175,8 @@ python scripts/validate_repository.py
 python -m unittest discover -s tests
 ```
 
-Both patches apply exactly against current `main`; no offset messages expected.
+Part A applies against `main` with or without the pending rescind patch; see
+the table above for which offsets to expect. Part B applies exactly.
 
 ## What is blocked until this is applied
 
