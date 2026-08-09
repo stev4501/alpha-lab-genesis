@@ -145,25 +145,29 @@ without deny rules — would let a session burn 90 minutes and then fail the gat
 for a change it was never warned off.
 
 Note that under ADR-0009 the validator runs only from `run_session.sh` inside
-the runner: the pending rescind patch deletes `.github/workflows/session-validate.yml`,
-so there is no CI copy of the gate once it is applied. Part B's enforcement is
-runner-side and prompt-side only.
+the runner. The rescind landed on `main` in `0cbb3e2` and deleted
+`.github/workflows/session-validate.yml`, so there is no CI copy of the gate at
+all now. Part B's enforcement would be runner-side and prompt-side only.
 
-## Interaction with the pending rescind patch
+## The rescind landed; the controls survived
 
-`patches/2026-08-09-rescind-pr-mode.diff` is still unapplied and rewrites
-`loop/run_session.sh`. Applying Part A directly to the runner raises the
-obvious question of whether the rescind then reverts it. Tested, not assumed:
+`patches/2026-08-09-rescind-pr-mode.diff` was applied to `main` in `0cbb3e2`,
+reverting the PR-mode runner and deleting the `session-validate` workflow. That
+commit and Part A both rewrite `loop/run_session.sh`, so the interaction was
+predicted, tested ahead of time, and then confirmed on the real merge:
 
-| Step | Result |
+| Check | Result |
 | :--- | :--- |
-| rescind applied over the current runner | applies cleanly, hunks offset +23 |
-| both skill controls afterwards | still present, still after `--allowedTools` |
-| resulting script | parses under `bash -n` |
+| merge of `main` into this branch | auto-merged, no conflict |
+| PR-mode remnants in the runner | none — `gh pr create` and `open_pull_request` gone, direct push to `main` restored |
+| both skill controls | present, still directly after `--allowedTools` |
+| `bash -n loop/run_session.sh` | parses |
+| `tests/test_dev_plugins.py` | green |
 
-The rescind's hunks sit outside the `claude -p` invocation, so the controls
-survive it and `test_runner_disables_skills` still passes. **Apply the rescind
-whenever you like; it does not undo Part A.**
+A clean auto-merge is not by itself evidence the result is right, which is why
+each line above was checked rather than inferred from git's exit code. The
+record patch in `patches/` was regenerated against post-rescind `main` and
+reverses cleanly against the tree.
 
 ### ADR-0009 raises the stakes on the finding above
 
@@ -206,8 +210,8 @@ python scripts/validate_repository.py
 python -m unittest discover -s tests
 ```
 
-Part A applies against `main` with or without the pending rescind patch; see
-the table above for which offsets to expect. Part B applies exactly.
+Part A is already applied; its patch file is a record, not a step. Part B
+applies exactly against current `main`.
 
 ## What is blocked until this is applied
 

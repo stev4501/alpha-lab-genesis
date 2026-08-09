@@ -1,8 +1,10 @@
 diff --git a/loop/run_session.sh b/loop/run_session.sh
-index d977dfc..0b55d3e 100644
+old mode 100644
+new mode 100755
+index ea33fd0..35d560d
 --- a/loop/run_session.sh
 +++ b/loop/run_session.sh
-@@ -93,6 +93,27 @@ PROMPT="$(sed -e "s/{{SESSION_ID}}/${SESSION_ID}/g" \
+@@ -68,6 +68,27 @@ PROMPT="$(sed -e "s/{{SESSION_ID}}/${SESSION_ID}/g" \
  # do NOT fire in -p mode; .claude/settings.json deny rules and this allowlist
  # are the only permission layers before validation.
  #
@@ -30,7 +32,7 @@ index d977dfc..0b55d3e 100644
  # Deliberately NOT allowlisted: "cat" and "ls". Bash patterns match the command
  # string, so "cat x > loop/validate_session.sh" satisfies "Bash(cat *)" while
  # writing to a path the Edit/Write deny rules protect. Read, Glob, and Grep
-@@ -102,6 +123,8 @@ set +e
+@@ -77,6 +98,8 @@ set +e
  timeout --signal=TERM "${SESSION_MINUTES}m" \
    "$CLAUDE_BIN" -p "$PROMPT" \
      --allowedTools "Read,Glob,Grep,Edit,Write,Bash(git status),Bash(git status *),Bash(git add *),Bash(git commit *),Bash(git log *),Bash(git diff *),Bash(git show *),Bash(python scripts/validate_repository.py *),Bash(python scripts/validate_repository.py),Bash(python scripts/preregister_experiment.py *),Bash(python scripts/finalize_experiment.py *),Bash(python scripts/record_evidence_review.py *),Bash(python scripts/register_market_snapshot.py *),Bash(python scripts/normalize_finance_ohlcv.py *),Bash(python evaluator/daily_bar.py *),Bash(python -m pytest *),Bash(mkdir -p *)" \
