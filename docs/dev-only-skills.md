@@ -171,14 +171,36 @@ so the guard covers a class rather than a flag.
 | `-pd`, `-dp`, `-pv` | refused | clustered short flags engage `--print` too |
 | `--print=true` | refused | the CLI also rejects it as an unknown option |
 | `--bg`, `--background` | refused | "Start the session as a background agent" — runs locally, plugin loaded, nobody watching |
-| `--cloud` | refused | precaution, see below |
-| `--remote-control` | passed | documented as starting an *interactive* session |
+| `--cloud`, `--remote` | refused | cloud session and its deprecated alias; precaution, see below |
+| `--remote-control`, `--rc` | passed | documented as starting an *interactive* session, driven by a human elsewhere |
 | `--permission-mode`, `--model`, `-d`, `-c`, `-w`, `--add-dir`, `--agent` | passed | ordinary interactive flags |
+| anything after `--` | passed | end-of-options marker; positional text |
 | a positional prompt mentioning `-p` or `--bg` | passed | not a flag |
 
 Long flags are exempted before the cluster test, so `--permission-mode` is not
 caught by its leading `p`. `--input-format` needs no rule: the CLI documents it
-as only working with `--print`, which is already refused.
+as only working with `--print`, which is already refused. Scanning stops at the
+`--` end-of-options marker, so `dev-session -- --bg` treats `--bg` as prompt
+text — but a flag *before* the marker is still caught.
+
+### `claude --help` is not the authoritative flag surface
+
+Worth knowing before extending the list: `--remote` and `--rc` are both
+recognized by the CLI and neither appears in `--help`. An enumeration of help
+output looks exhaustive and is not — which is how `--remote` survived a pass
+that was specifically hunting for this class of flag.
+
+To test whether a candidate flag exists without triggering its side effects,
+exploit the fact that the parser names the **first** unknown option:
+
+```bash
+claude <candidate> --print=true
+```
+
+If the error names `<candidate>`, it is not a real flag. If it names
+`--print=true`, the candidate was accepted. This is how `--remote`, `--rc`, and
+a dozen speculative aliases (`--headless`, `--detach`, `--daemon`, `--batch`,
+…) were checked without creating a single background or cloud session.
 
 `--cloud` is refused on precaution rather than a demonstrated bypass. Whether
 `--plugin-dir` survives into a cloud container was not verified, and creating

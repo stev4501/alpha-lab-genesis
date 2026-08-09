@@ -49,26 +49,39 @@ PLUGIN_DIRS=(
 #   --bg,
 #   --background   "Start the session as a background agent" -- runs locally,
 #                  so the plugin loads, with nobody watching.
-#   --cloud        "Create a cloud session". Refused on precaution rather than
-#                  a demonstrated bypass: whether --plugin-dir survives into a
-#                  cloud container was not verified, and creating one to find
-#                  out has side effects. The cost of refusing is a developer
-#                  calling claude directly; the cost of being wrong the other
-#                  way is skills in an unattended session.
+#   --cloud,
+#   --remote       "Create a cloud session", and its deprecated alias. Refused
+#                  on precaution rather than a demonstrated bypass: whether
+#                  --plugin-dir survives into a cloud container was not
+#                  verified, and creating one to find out has side effects. The
+#                  cost of refusing is a developer calling claude directly; the
+#                  cost of being wrong the other way is skills in an unattended
+#                  session.
 #
-# Deliberately NOT refused: --remote-control, documented as starting an
-# *interactive* session; and --input-format, which the CLI documents as only
-# working with --print, already refused above. A blanket TTY requirement is
-# also avoided -- it would break legitimate terminal wrappers without closing
-# any documented hole that these rules miss.
+# Deliberately NOT refused: --remote-control and its --rc alias, documented as
+# starting an *interactive* session driven by a human elsewhere; and
+# --input-format, which the CLI documents as only working with --print, already
+# refused above. A blanket TTY requirement is also avoided -- it would break
+# legitimate terminal wrappers without closing any hole these rules miss.
+#
+# NOTE for anyone extending this list: `claude --help` is NOT the authoritative
+# flag surface. --remote and --rc are both recognized and neither appears in
+# help output. To test whether a flag exists without triggering its side
+# effects, exploit the fact that the parser names the FIRST unknown option:
+#
+#     claude <candidate> --print=true
+#
+# If the error names <candidate>, it is not a real flag; if it names
+# --print=true, the candidate was accepted.
 #
 # Long flags are exempted before the cluster test so that --permission-mode and
 # friends are not caught by their leading "p".
 for arg in "$@"; do
   case "$arg" in
+    --) break ;;            # end of options; everything after is positional
     --print|--print=*) ;;                     # print mode, explicit long form
     --bg|--background|--bg=*|--background=*) ;;   # background agent
-    --cloud|--cloud=*) ;;                     # cloud session
+    --cloud|--cloud=*|--remote|--remote=*) ;; # cloud session, and its alias
     --*)  continue ;;                         # any other long flag is fine
     -*p*) ;;                                  # short cluster with p: -p, -pd, -dp
     *)    continue ;;                         # positional argument

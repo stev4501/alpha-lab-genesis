@@ -168,11 +168,31 @@ class TestDevPluginsStayOutOfAutonomousSessions(unittest.TestCase):
         """
         self.assertTrue((ROOT / "bin" / "dev-session").is_file(), "bin/dev-session missing")
         for flag in ("-p", "--print", "--print=true", "-pd", "-dp", "-pv",
-                     "--bg", "--background", "--cloud", "--cloud=desc"):
+                     "--bg", "--background", "--cloud", "--cloud=desc",
+                     "--remote", "--remote=task"):
             result = self._run_wrapper(flag, "noop")
             with self.subTest(flag=flag):
                 self.assertEqual(result.returncode, 2, f"{flag} was not refused")
                 self.assertIn("refusing non-interactive mode", result.stderr)
+
+    def test_dev_session_honours_end_of_options(self):
+        """`--` ends option scanning; what follows is positional text.
+
+        Without this the wrapper refuses `dev-session -- --bg`, where --bg is a
+        prompt the developer wants to talk about rather than a flag. The second
+        case guards the obvious wrong fix: a flag BEFORE the marker must still
+        be caught.
+        """
+        allowed = self._run_wrapper("--", "--bg", claude_bin="/bin/true")
+        self.assertEqual(
+            allowed.returncode, 0,
+            f"positional text after -- was refused: {allowed.stderr}",
+        )
+        refused = self._run_wrapper("--bg", "--", "x")
+        self.assertEqual(
+            refused.returncode, 2,
+            "a flag before -- must still be refused",
+        )
 
     def test_dev_session_still_accepts_interactive_use(self):
         """The guard must reject -p, not everything.
@@ -188,6 +208,7 @@ class TestDevPluginsStayOutOfAutonomousSessions(unittest.TestCase):
             ("-d",),                         # short flag without p
             ("-c",),
             ("--remote-control",),           # documented as interactive
+            ("--rc",),                       # its alias, likewise
             ("-w",),
             ("explain --bg and -p",),        # positional mentioning flags
         ):
