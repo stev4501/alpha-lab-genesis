@@ -67,6 +67,10 @@ without any change here. Check for drift with:
     grep -A4 '"name": "mattpocock-skills"' \
       ~/.claude/plugins/marketplaces/claude-plugins-official/.claude-plugin/marketplace.json
 
+The cloud-environment route in `dev/cloud/setup-mattpocock-skills.sh` does not
+use the official marketplace. It creates an environment-local marketplace and
+pins its HTTPS source directly to the commit recorded above.
+
 ## Do not
 
 - Do not copy or symlink these skills into `.claude/skills/`. That path loads

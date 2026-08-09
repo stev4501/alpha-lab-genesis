@@ -68,14 +68,15 @@ their per-repo configuration in `docs/agents/`, which most of them expect to
 `/mattpocock-skills:tdd` — so they cannot shadow a core skill or the bundled
 `/code-review`.
 
-### Cloud and web sessions: unsolved
+### Cloud and web sessions: environment-scoped delivery
 
 `--plugin-dir` only works where you control the launch — a local terminal.
 Claude Code on the web and other cloud sessions are launched by the harness, so
-the flag cannot be injected, and **these skills are not available there.**
-
-That is a real limitation, not an oversight. It is recorded here because the
-obvious fix has already been tried and disproved.
+the flag cannot be injected. Repository plugin declarations were tried and
+disproved, but the dedicated **Alpha Lab Dev** cloud environment now installs
+the pinned plugin explicitly before Claude launches. First-session direct and
+subagent invocation and second-session cached reuse are verified in
+`.claude/cloud-environment-plugin-acceptance.json`.
 
 #### `enabledPlugins` does not work — tested, twice
 
@@ -108,14 +109,20 @@ worked. That run was in a container where `claude plugin install --scope
 project` had just populated `~/.claude/plugins/`, so it measured the local
 install, not the declaration. Test from clean plugin state or not at all.
 
-#### What is left
+#### Current delivery routes
 
 - **Local terminal** — `bin/dev-session`, which works. For persistence outside
   this repo, `claude plugin install mattpocock-skills` at user scope.
-- **Untested lead** — the failing cloud sessions had no `~/.claude/plugins/` at
-  all, so `claude-plugins-official` was not a known marketplace and
-  `plugin@marketplace` had nothing to resolve against. Declaring the marketplace
-  with `extraKnownMarketplaces` may be the missing half. Unverified.
+- **Disproved repository route** — PR #17 added both an inline
+  `extraKnownMarketplaces` declaration and exact `enabledPlugins` entry. Two
+  independent fresh cloud sessions still created no marketplace or installed
+  plugin and reported `Unknown skill`. Repository declarations do not trigger
+  automatic cloud installation on Claude Code 2.1.226.
+- **Cloud environment installation** — `dev/cloud/setup-mattpocock-skills.sh`
+  explicitly creates a pinned local marketplace, installs the plugin before
+  Claude launches, and verifies the installed SHA and enabled state. See
+  `docs/cloud-environment-dev-skills.md`. This is environment-scoped rather than
+  repository-scoped; fresh and cached cloud acceptance are verified.
 - **Documented fallback** — committing the skills to `.claude/skills/`, which
   the docs say cloud sessions do load. It costs namespacing: project skills are
   invoked as `/code-review`, not `/mattpocock-skills:code-review`, and this
@@ -123,9 +130,9 @@ install, not the declaration. Test from clean plugin state or not at all.
   one. Renaming the directory avoids that. Not done; it is a decision, not a
   drop-in.
 
-Whatever route is chosen, it must not weaken the autonomous path: anything that
-makes these skills discoverable puts them in front of the loop agent, and the
-runner controls below are what keep them unusable there.
+The environment-scoped route does not change repository discovery and is not
+used by the GitHub Actions autonomous loop. Any future repository-scoped route
+would still reach the loop and must preserve the runner controls below.
 
 ## Why the runner's `--allowedTools` is not sufficient on its own
 

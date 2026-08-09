@@ -52,11 +52,14 @@ alpha-lab-genesis/
 ```
 
 Third-party skills under `dev/plugins/` are for development, not for the
-autonomous loop. `bin/dev-session` loads them in a local terminal; they are not
-available in cloud or web sessions, and `docs/dev-only-skills.md` records why
-and what was tried. The loop's runner strips skills outright
+autonomous loop. `bin/dev-session` loads them in a local terminal. The repository
+does not auto-install them in cloud or web sessions; supervised cloud use
+requires the environment-level setup documented in
+`docs/cloud-environment-dev-skills.md`. The loop's runner strips skills outright
 (`--disable-slash-commands`, `--disallowedTools "Skill"`), which is what would
 keep them unusable there if a delivery route is ever found.
+
+The cloud setup is intentionally not a repository plugin declaration.
 
 ## Source-of-Truth Rules
 

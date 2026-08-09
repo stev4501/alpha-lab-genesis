@@ -1,0 +1,37 @@
+{
+  "status": "verified",
+  "environmentName": "Alpha Lab Dev",
+  "configDir": "/opt/alpha-lab-dev/claude-config",
+  "pluginId": "mattpocock-skills@alpha-lab-pinned",
+  "gitCommitSha": "84fdeffd12f2ee307994d1eb6feb48173b6e0502",
+  "claudeVersion": "2.1.226",
+  "networkAccess": "Trusted",
+  "setupScriptSha256": "5fad0741b56496a6bff1abeee362a09bc818872de412a34c561e0e26ff621c96",
+  "setupScriptDigestMatched": true,
+  "firstSessionDirectInvocation": true,
+  "firstSessionSubagentInvocation": true,
+  "firstSessionSetupRan": true,
+  "cachedSessionDirectInvocation": true,
+  "cachedSessionSetupSkipped": true,
+  "firstSessionUrl": "https://claude.ai/code/session_01Ds14JPgjR8CZXMADdfPqzE",
+  "cachedSessionUrl": "https://claude.ai/code/session_01JSgKixanpWvb426EaYRg7M",
+  "verifiedAt": "2026-08-09T22:37:55Z",
+  "firstSessionRuntimeUser": "root",
+  "firstSessionConfigDir": "/opt/alpha-lab-dev/claude-config",
+  "installedPluginVersion": "1.2.3",
+  "installedPluginPath": "/opt/alpha-lab-dev/claude-config/plugins/cache/alpha-lab-pinned/mattpocock-skills/1.2.3",
+  "directSkillHeading": "Test-Driven Development",
+  "subagentSkillHeading": "Test-Driven Development",
+  "cachedSessionRuntimeUser": "root",
+  "cachedSessionConfigDir": "/opt/alpha-lab-dev/claude-config",
+  "cachedSessionPluginVersion": "1.2.3",
+  "cachedSessionPluginPath": "/opt/alpha-lab-dev/claude-config/plugins/cache/alpha-lab-pinned/mattpocock-skills/1.2.3",
+  "cachedSessionSkillHeading": "Test-Driven Development",
+  "failedRuns": [
+    {
+      "sessionUrl": "https://claude.ai/code/session_01AkstRaVebA4tHJ8SRgssaq",
+      "reason": "Cloud environment variables were not present in the pre-launch setup process; setup now exports the fixed config path internally."
+    }
+  ],
+  "notes": "First-session direct and independent subagent acceptance passed. A second new session reused cached environment state without a setup-script step and direct TDD invocation remained available."
+}
