@@ -280,340 +280,121 @@ the cheaper side of the trade.
 ### Version-pinned compatibility check
 
 The unit tests run against a stubbed `CLAUDE_BIN` and therefore **cannot** prove
-anything about Claude's parser. Two behaviours the wrapper depends on are
-properties of the CLI, not of this repository.
+anything about Claude's parser. Two behaviours the wrapper depends on belong to
+the external CLI, not this repository:
 
-**Currently verified: 2.1.226** — both probes confirmed on 2026-08-10, by a
-whole-script run against the operational CLI. Update this line on every run; the
-run log at the end of the section holds the history behind it.
+- `--` does not stop option parsing, so a following `--bg` starts a background
+  session.
+- Clustered short flags containing `p` engage `--print`.
 
-**Trigger:** any change to the operational Claude Code version — an upgrade, a
-downgrade, or a pinned version moving underneath you. This section carries its
-own trigger and the full procedure; nothing elsewhere needs to point at it for
-it to be run.
+**Currently verified: 2.1.226** — both behaviours confirmed on 2026-08-10.
 
-#### The probe script
-
-This is the whole procedure — one script, no assembly. Save it, run it, read its
-exit status. Do not paste it into an interactive shell: the guards call `exit`,
-which would close your session rather than abort the check.
-
-It is **fail-closed**. Every expected outcome is asserted rather than described,
-so a changed CLI behaviour exits non-zero instead of relying on someone reading
-the output carefully. Per ADR-0003, deterministic conditions are enforced by
-scripts, not left as prose. Probe 1 starts a real background session, so cleanup
-is installed as an `EXIT` trap *before* the session can exist, and the script
-does not report success until the session is confirmed gone.
-
-"Fail-closed" is claimed narrowly. The trap covers normal exits and errors,
-including `set -e` aborts and Ctrl-C; it cannot run after a `SIGKILL`, a
-crashed shell, or a dead machine, and a session started just before one of
-those is leaked. The read-back is written so that *not knowing* is also a
-failure: if `agents --json` cannot be read, the script says so and exits
-non-zero rather than treating an unreadable answer as absence.
+**Trigger:** rerun the verifier after any change to the operational Claude Code
+version, including an upgrade, downgrade, or changed package pin:
 
 ```bash
-#!/usr/bin/env bash
-# Re-verify the two CLI behaviours bin/dev-session depends on.
-# Exit 0 = both still hold and nothing was left running. Any other exit = look.
-set -euo pipefail
-
-# Resolve the operational binary once, from PATH only. `type -P` skips aliases
-# and shell functions; `command -v` would return those, and an alias definition
-# is text, not a path you can execute.
-PROBE_BIN="$(type -P claude)" || { echo "claude not on PATH" >&2; exit 1; }
-case "$PROBE_BIN" in /*) ;; *) echo "not an absolute path: $PROBE_BIN" >&2; exit 1 ;; esac
-[ -x "$PROBE_BIN" ] || { echo "not executable: $PROBE_BIN" >&2; exit 1; }
-
-# Run a command, capturing output and status without tripping errexit: a probe
-# expected to fail must still be recordable. Stdin is closed so a scripted run
-# does not stall three seconds waiting for input it will never receive.
-run_probe() {
-  if probe_out="$("$@" </dev/null 2>&1)"; then probe_status=0; else probe_status=$?; fi
-}
-
-# Ids out of *anchored* "backgrounded · <id>" lines, one per line. Anchored so a
-# reworded message cannot donate a stray word as an id: "backgrounded service"
-# once matched, and the trap would then have stopped and cleared "service"
-# while the real session kept running.
-session_ids_from() {
-  printf '%s\n' "${1:-}" \
-    | sed -n 's/^[[:space:]]*backgrounded[[:space:]]*·[[:space:]]*\([[:alnum:]][[:alnum:]_-]*\)[[:space:]]*$/\1/p'
-}
-
-# Active *background* session ids, full uuids, one per line. Fails loudly if the
-# CLI errors or the payload is not the JSON array we expect: an unreadable or
-# malformed answer must never be mistaken for "nothing is running".
-background_ids() {
-  local out status
-  if out="$("$PROBE_BIN" agents --json </dev/null 2>&1)"; then status=0; else status=$?; fi
-  [ "$status" -eq 0 ] || { printf 'agents --json failed (exit %s): %s\n' "$status" "$out" >&2; return 1; }
-  printf '%s' "$out" | python3 -c '
-import json, sys
-try:
-    data = json.load(sys.stdin)
-except Exception as exc:
-    print("malformed agents --json payload: %s" % exc, file=sys.stderr)
-    raise SystemExit(1)
-if not isinstance(data, list):
-    print("agents --json did not return a list", file=sys.stderr)
-    raise SystemExit(1)
-for s in data:
-    if isinstance(s, dict) and s.get("kind") == "background" and isinstance(s.get("sessionId"), str):
-        print(s["sessionId"])
-'
-}
-
-# --- version -------------------------------------------------------------
-run_probe "$PROBE_BIN" --version
-[ "$probe_status" -eq 0 ] \
-  || { printf 'version lookup failed (exit %s): %s\n' "$probe_status" "$probe_out" >&2; exit 1; }
-PROBE_VERSION="${probe_out%%$'\n'*}"      # first line only
-PROBE_VERSION="${PROBE_VERSION%% *}"      # first field of that line
-# Exactly X.Y.Z. A prerelease or any other shape is refused rather than logged:
-# an unexpected version string is itself a reason to stop and look.
-[[ "$PROBE_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] \
-  || { printf 'version %q is not a plain X.Y.Z release\n' "$PROBE_VERSION" >&2; exit 1; }
-printf 'binary=%s version=%s\n' "$PROBE_BIN" "$PROBE_VERSION"
-
-# --- probe 2: do clustered short flags still engage --print? --------------
-run_probe "$PROBE_BIN" -pd "say ok"
-printf '%s\n' "$probe_out" | grep -v '^Permission deny rule' || true
-case "$probe_out" in
-  *"Input must be provided"*"--print"*) ;;
-  *) echo "PROBE 2 CHANGED: clusters no longer engage --print" >&2; exit 1 ;;
-esac
-[ "$probe_status" -eq 1 ] \
-  || { printf 'PROBE 2 CHANGED: expected exit 1, got %s\n' "$probe_status" >&2; exit 1; }
-echo "probe2=confirmed"
-
-# --- probe 1: does `--` still fail to end option parsing? -----------------
-# Snapshot what was already running. Cleanup is judged by set difference, not by
-# one captured id: a probe session can spawn a second background session, and
-# stopping only the id we saw would leave that one running while reporting
-# success. Anything background that was not here before must be gone after.
-PRE_BG="$(background_ids)" \
-  || { echo "CLEANUP UNVERIFIED: cannot read background sessions before probe 1" >&2; exit 1; }
-
-# Trap first: from here on, every normal exit and error path stops and verifies.
-# A SIGKILL or a crashed shell runs no trap and can still leak a session.
-SESSION_ID=""
-cleanup() {
-  local rc=$? stop_out stop_status post leaked
-  [ -n "$SESSION_ID" ] || SESSION_ID="$(session_ids_from "${probe_out:-}" | head -n 1)"
-  if [ -n "$SESSION_ID" ]; then
-    # `claude stop` wants the short id, rejects the full uuid, and exits 0 even
-    # when it matched nothing -- so its status proves nothing and its output is
-    # printed rather than trusted. Absence is the authority.
-    if stop_out="$("$PROBE_BIN" stop "$SESSION_ID" </dev/null 2>&1)"; then stop_status=0; else stop_status=$?; fi
-    printf 'stop: exit=%s %s\n' "$stop_status" "$stop_out"
-  fi
-  if ! post="$(background_ids)"; then
-    printf 'CLEANUP UNVERIFIED: cannot read background sessions after stop; %s may still be running\n' \
-      "${SESSION_ID:-<no id captured>}" >&2
-    exit 1
-  fi
-  leaked="$(PRE="$PRE_BG" POST="$post" python3 -c '
-import os
-pre = set(filter(None, os.environ["PRE"].splitlines()))
-post = set(filter(None, os.environ["POST"].splitlines()))
-print("\n".join(sorted(post - pre)))
-')"
-  if [ -n "$leaked" ]; then
-    printf 'CLEANUP FAILED: background session(s) left running that were not there before:\n%s\n' "$leaked" >&2
-    exit 1
-  fi
-  printf 'cleanup=verified (no new background session remains)\n'
-  exit "$rc"
-}
-trap cleanup EXIT
-
-run_probe "$PROBE_BIN" --plugin-dir "$PWD/dev/plugins/mattpocock-skills" -- --bg
-printf '%s\n' "$probe_out" | grep -v '^Permission deny rule' || true
-[ "$probe_status" -eq 0 ] \
-  || { printf 'PROBE 1 CHANGED: expected exit 0, got %s\n' "$probe_status" >&2; exit 1; }
-mapfile -t PROBE1_IDS < <(session_ids_from "$probe_out")
-[ "${#PROBE1_IDS[@]}" -eq 1 ] \
-  || { printf 'PROBE 1 CHANGED: expected exactly one "backgrounded · <id>" line, found %s\n' \
-       "${#PROBE1_IDS[@]}" >&2; exit 1; }
-SESSION_ID="${PROBE1_IDS[0]}"
-echo "probe1=confirmed (session $SESSION_ID)"
+python3 scripts/verify_claude_compatibility.py > /tmp/claude-compatibility.md
+status=$?
+cat /tmp/claude-compatibility.md
 ```
 
-`PROBE_BIN` is deliberately **not** named `CLAUDE_BIN`: `bin/dev-session` reads
-`CLAUDE_BIN` from the environment as its test stub, so a developer who exported
-that name while following this procedure would repoint the very wrapper the
-probes exist to check.
+The command resolves the operational `claude` executable once, runs both probes,
+owns the real background-session lifecycle, and prints one complete Markdown
+audit record. Exit `0` means both behaviours matched and cleanup was verified.
+Any other exit means the version is not confirmed; append the emitted record
+anyway, then investigate before changing the current-version line.
 
-What "version-pinned" means here: the binary is resolved once to an absolute
-path, the version is read **from that same binary**, and both are printed
-together. Every probe reuses `$PROBE_BIN` rather than the name `claude`, so a
-`PATH` change or an update landing mid-run cannot swap the binary underneath the
-version already recorded.
+The verifier launches probe 1 from a unique temporary directory. That directory,
+not the launcher token printed by Claude, is the ownership marker. It validates
+`agents --json`, stops the launcher and every owned active-session id, follows
+replacement child ids, and succeeds only after the owned session set remains
+empty for ten consecutive reads. Unreadable or malformed state is
+**unverified**, never interpreted as absence.
 
-`run_probe` exists so the capture rule is written once and obeyed everywhere. A
-pipeline takes its status from its last stage, so any `cmd | grep …` reports the
-filter's success rather than the command's — the version lookup and probe 2
-would both silently log a pass over a failure. And because these probes are
-*expected* to exit non-zero, a bare `out="$(…)"; status=$?` aborts under `set -e`
-before the status is recorded, losing exactly the run most worth having. The
-`grep -v '^Permission deny rule'` calls are display only: in a repository whose
-`.claude/settings.json` carries `Write(...)` deny rules, each such rule prints a
-"not matched by file permission checks" warning ahead of the real output.
-Filtering never touches `probe_status`, which `run_probe` captured before any
-pipe existed, and `|| true` keeps the filter non-fatal since `grep` exits 1 when
-it removes every line.
+Ctrl-C and SIGTERM are recorded while cleanup continues. No process can clean
+up after SIGKILL, a crashed interpreter, or a dead machine; those remain the
+explicit limit of the procedure.
 
-Cleanup goes through `$PROBE_BIN`, not a bare `claude` and not `kill <pid>`.
-Session management is a contract between a CLI and the sessions it created, and
-this section exists precisely because cross-version CLI behaviour is not assumed
-stable; stopping through a different binary risks a stop that appears to succeed
-while the session survives, and the absence check would not catch it because it
-too would be asking the wrong CLI. `kill` fails differently: it leaves the
-session record behind, so the absence check can no longer tell a stopped session
-from one that was never cleaned up. `claude stop` is absent from
-`claude --help`'s command list but is real — see "`claude --help` is not the
-authoritative flag surface" below, the same trap in a different place.
+If either CLI behaviour changes, update `bin/dev-session`, its tests, and this
+document together in one pull request:
 
-Four things about session identity and `stop`, all observed at 2.1.226 while
-building this, and all load-bearing for the code above:
-
-- **The `backgrounded · <id>` id is a prefix, not the session id.** The line
-  prints `d43d174d`; `agents --json` reports
-  `d43d174d-…-…-…-…`. Comparing the short id to `sessionId` for
-  *equality* would report a live session as absent, so the check matches by
-  prefix — and, more importantly, does not depend on that match at all (below).
-- **`claude stop` wants the short id and rejects the full uuid**, answering
-  `No job matching '<uuid>'`. The obvious hardening — resolve to the full id,
-  then stop that — does not work.
-- **`claude stop` exits 0 even when it matched nothing.** Its status is not
-  evidence, which is why it is printed and then ignored in favour of a re-read.
-- **A probe session can spawn a second background session.** One did, while
-  this section was being written: stopping the captured id left a second
-  session running under a name derived from the work it had picked up. A
-  cleanup check that only asks "is my id gone?" answers yes and leaves that one
-  running.
-
-That last one is why cleanup is judged by set difference — background sessions
-present after, minus those present before — rather than by the captured id. The
-id is still used to *stop* the session, but it is not what proves the machine is
-clean, so a mis-parsed or unparsed id can no longer produce a false pass.
-
-The absence check deliberately reads `agents --json`, not `agents --json --all`.
-A stopped session is *finished*, not erased — `claude stop` keeps its
-conversation so it can be reopened with `claude attach <id>` — so the stopped id
-still appears under `--all` as a completed session. That is a successful
-cleanup, not a failed one. Checking with `--all` would never pass.
+- If `--` starts being honoured, stop `first_refusal` at the marker and reverse
+  `TestRefusalRules.test_end_of_options_marker_does_not_stop_the_scan`.
+- If clustered flags stop engaging `--print`, explicitly decide whether the
+  cluster refusal remains useful defence in depth, then update the refusal table
+  and `TestRefusalRules.test_refused_forms`.
 
 #### Run log
 
-Append an entry on every run, including runs where nothing changed, and
-including the **exact commands as executed**. Outcomes without commands cannot
-be reproduced or audited: a reader cannot tell which binary was probed, and
-"confirmed" becomes a claim rather than a record. For probe 1 the session id,
-the stop, and the post-stop absence check are part of the outcome, because an
-uncleaned session is a failed run even if the parser behaved as expected.
+Append every generated record, including changed and unverified runs.
 
-The log lives here, in the canonical compatibility section, rather than in a
-file of its own. That means this document is edited both when the wrapper's
-design changes and on every compatibility run — two unrelated reasons, which is
-normally worth splitting. It is not split because the procedure requires the
-record to sit in this section, and a log holds records rather than instructions,
-so there is nothing here that could drift out of step with the procedure above.
+**2026-08-08 — 2.1.226 — confirmed**
 
-**2026-08-08 — 2.1.226 — both confirmed**
+Reference entry from PR #3. Both behaviours were reported confirmed, but the
+exact commands predate the structured verifier and were not preserved.
 
-Recorded by PR #3, which established the probes. It predates this logging
-format, so the exact commands were not preserved; both behaviours were reported
-confirmed against 2.1.226. It is a reference entry, not a reproducible record —
-the first entry meeting the format in full is the one below.
+**2026-08-10T03:24:18.795200+00:00 — 2.1.226 — confirmed**
 
-**2026-08-10 — 2.1.226 — both probes confirmed, cleanup verified**
-
-Not triggered by a version change; run while establishing this procedure. The
-script was extracted verbatim from this document rather than retyped, so what
-was tested is what is published:
-
-```bash
-python3 -c "
-import pathlib,re
-t=pathlib.Path('docs/dev-only-skills.md').read_text()
-s=t.split('### Version-pinned compatibility check')[1].split('### \`claude --help\`')[0]
-print(re.findall(r'\`\`\`bash\\n(.*?)\`\`\`', s, re.S)[0])
-" > probe.sh
-```
-
-Run whole against the operational CLI, probe 1 included:
-
-```
-$ claude agents --json | python3 -c "import json,sys; print([s['sessionId'] for s in json.load(sys.stdin) if s.get('kind')=='background'] or 'none')"
-none
-
-$ bash probe.sh
-binary=/opt/node22/bin/claude version=2.1.226
-Error: Input must be provided either through stdin or as a prompt argument when using --print
-probe2=confirmed
-Starting background service…
-backgrounded · d43d174d
-  claude agents             list sessions
-  claude attach d43d174d    open in this terminal
-  claude logs d43d174d      show recent output
-  claude stop d43d174d      stop this session
-probe1=confirmed (session d43d174d)
-stop: exit=0 stopped d43d174d
-cleanup=verified (no new background session remains)
-$ echo $?
-0
-
-$ claude agents --json | python3 -c "
-import json,sys
-d=json.load(sys.stdin)
-print('background:', [s['sessionId'] for s in d if s.get('kind')=='background'] or 'none')
-print('any id starting d43d174d:', any(s.get('sessionId','').startswith('d43d174d') for s in d))
-"
-background: none
-any id starting d43d174d: False
-```
-
-The external check names the same session as the run above it, so it corroborates
-this entry rather than an earlier one.
-
-The fail-closed paths cannot be exercised against a CLI that is behaving, so they
-are checked against a stub — the technique `tests/test_dev_session.py` already
-uses. Put a fake `claude` earlier on `PATH` than the real one:
-
-| Stub behaviour | Result |
-| :--- | :--- |
-| clusters no longer engage `--print` | `PROBE 2 CHANGED`, exit 1 |
-| `--` honoured, no session starts | `PROBE 1 CHANGED: found 0`, exit 1 |
-| message reworded to `backgrounded service` | `PROBE 1 CHANGED: found 0`, exit 1 — no stray id stopped |
-| two `backgrounded` lines | `CLEANUP FAILED`, names the second session, exit 1 |
-| probe session spawns a second background session | `CLEANUP FAILED`, names the spawned session, exit 1 |
-| `stop` silently fails | `CLEANUP FAILED`, names the surviving session, exit 1 |
-| `agents --json` errors | `CLEANUP UNVERIFIED`, exit 1 |
-| `agents --json` returns malformed JSON | `CLEANUP UNVERIFIED` with the parse error, exit 1 |
-| probe 1 exits non-zero but still prints an id | `PROBE 1 CHANGED: expected exit 0, got 3`, exit 1 |
-| version `2.1.226junk`, `2.1`, or `2.1.226-beta.1` | rejected, exit 1 |
-
-#### If either outcome changes
-
-The wrapper, its tests, and this document move together, in one pull request.
-
-- **Probe 1 flips** (the CLI starts honouring `--`): stop `first_refusal` at the
-  marker in `bin/dev-session`, reverse
-  `TestRefusalRules.test_end_of_options_marker_does_not_stop_the_scan` in
-  `tests/test_dev_session.py`, and drop the "`--` is not honoured" section
-  above.
-- **Probe 2 flips** (clusters stop engaging `--print`): the cluster rule in
-  `first_refusal` becomes dead weight rather than wrong, so decide explicitly
-  whether to keep it as defence in depth or remove it, and update both the
-  `-pd`, `-dp`, `-pv` row in the refusal table and
-  `TestRefusalRules.test_refused_forms` to match whichever you choose.
-
-Leaving one of the three behind is the failure this coupling exists to prevent:
-a wrapper corrected without its test still passes, for the wrong reason, and a
-document left stale is how the next reader re-derives a bypass that was already
-found and closed.
+- Binary: `/home/user/.npm/_npx/60c90828880b6b55/node_modules/@anthropic-ai/claude-code-linux-x64/claude`
+- Cleanup verified: `true`
+- Launcher ids: `47717105`
+- Owned active-session ids: `47717105, 63f3ee76`
+- Commands:
+  - `/home/user/.npm/_npx/60c90828880b6b55/node_modules/@anthropic-ai/claude-code-linux-x64/claude --version` in `/home/user/workspace/alpha-lab-genesis` → exit `0`
+    - Output SHA-256: `e37ccb4dc1755e9f53a0f0aed3124d292b79d44274404a00ef7cf6997e4cbf07`
+    - Output: `"2.1.226 (Claude Code)\n"`
+  - `/home/user/.npm/_npx/60c90828880b6b55/node_modules/@anthropic-ai/claude-code-linux-x64/claude -pd 'say ok'` in `/home/user/workspace/alpha-lab-genesis` → exit `1`
+    - Output SHA-256: `8283756c5ed7a2780896c6be0ecd35712d53cadbc4538d32cbdb956def267268`
+    - Output tail: `"laude/settings.json): Write(data/raw/**) is not matched by file permission checks — only Edit(path) rules are. Use Edit(data/raw/**) instead (Edit rules cover all file-editing tools).\nPermission deny rule (.claude/settings.json): Write(data/provenance/**) is not matched by file permission checks — only Edit(path) rules are. Use Edit(data/provenance/**) instead (Edit rules cover all file-editing tools).\nError: Input must be provided either through stdin or as a prompt argument when using --print\n"`
+  - `/home/user/.npm/_npx/60c90828880b6b55/node_modules/@anthropic-ai/claude-code-linux-x64/claude agents --json` in `/home/user/workspace/alpha-lab-genesis` → exit `0`
+    - Output SHA-256: `37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570`
+  - `/home/user/.npm/_npx/60c90828880b6b55/node_modules/@anthropic-ai/claude-code-linux-x64/claude --plugin-dir /home/user/workspace/alpha-lab-genesis/dev/plugins/mattpocock-skills -- --bg` in `/tmp/claude-compat-35ncocm0` → exit `0`
+    - Output SHA-256: `32aaec088e6d7ed5f5b11a3ae68b56b7ac379f3be881a5f9b686ad455067cd9e`
+    - Output: `"Starting background service…\nbackgrounded · 47717105\n  claude agents             list sessions\n  claude attach 47717105    open in this terminal\n  claude logs 47717105      show recent output\n  claude stop 47717105      stop this session\n"`
+  - `/home/user/.npm/_npx/60c90828880b6b55/node_modules/@anthropic-ai/claude-code-linux-x64/claude agents --json` in `/home/user/workspace/alpha-lab-genesis` → exit `0`
+    - Output SHA-256: `b8adfbad87459942e98b99a484308cb04673293eb4f71669b0f3d00938ae573a`
+  - `/home/user/.npm/_npx/60c90828880b6b55/node_modules/@anthropic-ai/claude-code-linux-x64/claude stop 47717105` in `/home/user/workspace/alpha-lab-genesis` → exit `0`
+    - Output SHA-256: `4be913a431c77fa61ca5fa48fd0173492ee4b78e04f394b39307e830ac3179d9`
+    - Output: `"stopped 47717105\n"`
+  - `/home/user/.npm/_npx/60c90828880b6b55/node_modules/@anthropic-ai/claude-code-linux-x64/claude agents --json` in `/home/user/workspace/alpha-lab-genesis` → exit `0`
+    - Output SHA-256: `65112c30581a4282e7775a11205646a4c85edb5d12b92fbd558b3d236725a742`
+  - `/home/user/.npm/_npx/60c90828880b6b55/node_modules/@anthropic-ai/claude-code-linux-x64/claude stop 63f3ee76` in `/home/user/workspace/alpha-lab-genesis` → exit `0`
+    - Output SHA-256: `27239ed5d66f8e09c2614ac33310e0752e68709a3f93d9889c6c0f4a5263b0a7`
+    - Output: `"stopped 63f3ee76\n"`
+  - `/home/user/.npm/_npx/60c90828880b6b55/node_modules/@anthropic-ai/claude-code-linux-x64/claude agents --json` in `/home/user/workspace/alpha-lab-genesis` → exit `0`
+    - Output SHA-256: `37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570`
+  - `/home/user/.npm/_npx/60c90828880b6b55/node_modules/@anthropic-ai/claude-code-linux-x64/claude agents --json` in `/home/user/workspace/alpha-lab-genesis` → exit `0`
+    - Output SHA-256: `37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570`
+  - `/home/user/.npm/_npx/60c90828880b6b55/node_modules/@anthropic-ai/claude-code-linux-x64/claude agents --json` in `/home/user/workspace/alpha-lab-genesis` → exit `0`
+    - Output SHA-256: `37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570`
+  - `/home/user/.npm/_npx/60c90828880b6b55/node_modules/@anthropic-ai/claude-code-linux-x64/claude agents --json` in `/home/user/workspace/alpha-lab-genesis` → exit `0`
+    - Output SHA-256: `37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570`
+  - `/home/user/.npm/_npx/60c90828880b6b55/node_modules/@anthropic-ai/claude-code-linux-x64/claude agents --json` in `/home/user/workspace/alpha-lab-genesis` → exit `0`
+    - Output SHA-256: `37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570`
+  - `/home/user/.npm/_npx/60c90828880b6b55/node_modules/@anthropic-ai/claude-code-linux-x64/claude agents --json` in `/home/user/workspace/alpha-lab-genesis` → exit `0`
+    - Output SHA-256: `37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570`
+  - `/home/user/.npm/_npx/60c90828880b6b55/node_modules/@anthropic-ai/claude-code-linux-x64/claude agents --json` in `/home/user/workspace/alpha-lab-genesis` → exit `0`
+    - Output SHA-256: `37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570`
+  - `/home/user/.npm/_npx/60c90828880b6b55/node_modules/@anthropic-ai/claude-code-linux-x64/claude agents --json` in `/home/user/workspace/alpha-lab-genesis` → exit `0`
+    - Output SHA-256: `37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570`
+  - `/home/user/.npm/_npx/60c90828880b6b55/node_modules/@anthropic-ai/claude-code-linux-x64/claude agents --json` in `/home/user/workspace/alpha-lab-genesis` → exit `0`
+    - Output SHA-256: `37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570`
+  - `/home/user/.npm/_npx/60c90828880b6b55/node_modules/@anthropic-ai/claude-code-linux-x64/claude agents --json` in `/home/user/workspace/alpha-lab-genesis` → exit `0`
+    - Output SHA-256: `37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570`
+- Observations:
+  - clustered short flags still engage --print
+  - post-marker --bg started launcher 47717105 and active sessions 47717105
+  - cleanup read owned ids: 63f3ee76
+  - cleanup read owned ids: none
+  - cleanup read owned ids: none
+  - cleanup read owned ids: none
+  - cleanup read owned ids: none
+  - cleanup read owned ids: none
+  - cleanup read owned ids: none
+  - cleanup read owned ids: none
+  - cleanup read owned ids: none
+  - cleanup read owned ids: none
+  - cleanup read owned ids: none
 
 ### `claude --help` is not the authoritative flag surface
 
