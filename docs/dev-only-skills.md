@@ -281,30 +281,82 @@ the cheaper side of the trade.
 
 The unit tests run against a stubbed `CLAUDE_BIN` and therefore **cannot** prove
 anything about Claude's parser. Two behaviours the wrapper depends on are
-properties of the CLI, not of this repository, and need re-checking whenever
-Claude Code is upgraded:
+properties of the CLI, not of this repository.
+
+**Trigger:** any change to the operational Claude Code version — an upgrade, a
+downgrade, or a pinned version moving underneath you. This section carries its
+own trigger and the full procedure; nothing elsewhere needs to point at it for
+it to be run.
+
+#### Probe 1 — does `--` still fail to end option parsing?
 
 ```bash
-# 1. Does `--` still fail to end option parsing?  (expect: background session starts)
 npx -y @anthropic-ai/claude-code@<version> \
   --plugin-dir "$PWD/dev/plugins/mattpocock-skills" -- --bg
+```
 
-# 2. Do clustered short flags still engage --print?  (expect: the --print prompt error)
+Expect a background session to start (`backgrounded · <id>`), which is what
+makes continuing to scan past the marker correct.
+
+This probe **starts a real background session.** Stop it, then confirm it is
+actually gone:
+
+```bash
+claude stop <id>        # the id from the "backgrounded · <id>" line
+claude agents --json    # expect: no session with that id
+```
+
+`claude stop` is absent from `claude --help`'s command list but is real — see
+"`claude --help` is not the authoritative flag surface" below, which is the
+same trap in a different place. Prefer it to `kill <pid>`: killing the process
+leaves the session record behind, so the confirmation step can no longer tell a
+stopped session apart from one that was never cleaned up.
+
+#### Probe 2 — do clustered short flags still engage `--print`?
+
+```bash
 npx -y @anthropic-ai/claude-code@<version> -pd "say ok"
 ```
 
-Check 1 **starts a real background session**. Stop it immediately:
+Expect `Error: Input must be provided either through stdin or as a prompt
+argument when using --print`. No session starts, so there is nothing to clean
+up.
 
-```bash
-claude agents --json          # find the id and pid
-kill <pid>
-```
+#### Record every run
 
-Last verified against **2.1.226**: both behaviours confirmed. If a future
-version starts honouring `--`, drop the note above, stop `first_refusal` at the
-marker in `bin/dev-session`, and reverse
-`TestRefusalRules.test_end_of_options_marker_does_not_stop_the_scan` in
-`tests/test_dev_session.py`.
+Add a row below on every run, including runs where nothing changed. A procedure
+with no log cannot answer "when was this last true?", which is the only question
+an upgrade actually asks.
+
+| Date | Version | Probe 1 (`--` not honoured) | Probe 2 (clusters engage `--print`) |
+| :--- | :--- | :--- | :--- |
+| 2026-08-08 | 2.1.226 | confirmed | confirmed |
+| 2026-08-10 | 2.1.226 | not re-run | confirmed |
+
+The 2026-08-10 row was not triggered by a version change — it re-ran the
+non-destructive probe only, while establishing this procedure. Probe 1 was left
+alone rather than starting a background session for no reason, which is why the
+log records "not re-run" instead of silently reusing the earlier result.
+
+#### If either outcome changes
+
+The wrapper, its tests, and this document move together, in one pull request.
+
+- **Probe 1 flips** (the CLI starts honouring `--`): stop `first_refusal` at the
+  marker in `bin/dev-session`, reverse
+  `TestRefusalRules.test_end_of_options_marker_does_not_stop_the_scan` in
+  `tests/test_dev_session.py`, and drop the "`--` is not honoured" section
+  above.
+- **Probe 2 flips** (clusters stop engaging `--print`): the cluster rule in
+  `first_refusal` becomes dead weight rather than wrong, so decide explicitly
+  whether to keep it as defence in depth or remove it, and update both the
+  `-pd`, `-dp`, `-pv` row in the refusal table and
+  `TestRefusalRules.test_refused_forms` to match whichever you choose.
+
+Leaving one of the three behind is the failure this coupling exists to prevent:
+a wrapper corrected without its test still passes, for the wrong reason, and a
+document left stale is how the next reader re-derives a bypass that was already
+found and closed.
 
 ### `claude --help` is not the authoritative flag surface
 
