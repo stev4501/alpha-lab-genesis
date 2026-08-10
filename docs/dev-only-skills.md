@@ -332,10 +332,36 @@ run_probe() {
   if probe_out="$("$@" </dev/null 2>&1)"; then probe_status=0; else probe_status=$?; fi
 }
 
-session_id_from() {  # the id out of a "backgrounded · <id>" line, if present
+# Ids out of *anchored* "backgrounded · <id>" lines, one per line. Anchored so a
+# reworded message cannot donate a stray word as an id: "backgrounded service"
+# once matched, and the trap would then have stopped and cleared "service"
+# while the real session kept running.
+session_ids_from() {
   printf '%s\n' "${1:-}" \
-    | sed -n 's/.*backgrounded[^[:alnum:]]*\([[:alnum:]_-]\{4,\}\).*/\1/p' \
-    | head -n 1
+    | sed -n 's/^[[:space:]]*backgrounded[[:space:]]*·[[:space:]]*\([[:alnum:]][[:alnum:]_-]*\)[[:space:]]*$/\1/p'
+}
+
+# Active *background* session ids, full uuids, one per line. Fails loudly if the
+# CLI errors or the payload is not the JSON array we expect: an unreadable or
+# malformed answer must never be mistaken for "nothing is running".
+background_ids() {
+  local out status
+  if out="$("$PROBE_BIN" agents --json </dev/null 2>&1)"; then status=0; else status=$?; fi
+  [ "$status" -eq 0 ] || { printf 'agents --json failed (exit %s): %s\n' "$status" "$out" >&2; return 1; }
+  printf '%s' "$out" | python3 -c '
+import json, sys
+try:
+    data = json.load(sys.stdin)
+except Exception as exc:
+    print("malformed agents --json payload: %s" % exc, file=sys.stderr)
+    raise SystemExit(1)
+if not isinstance(data, list):
+    print("agents --json did not return a list", file=sys.stderr)
+    raise SystemExit(1)
+for s in data:
+    if isinstance(s, dict) and s.get("kind") == "background" and isinstance(s.get("sessionId"), str):
+        print(s["sessionId"])
+'
 }
 
 # --- version -------------------------------------------------------------
@@ -362,37 +388,42 @@ esac
 echo "probe2=confirmed"
 
 # --- probe 1: does `--` still fail to end option parsing? -----------------
-# Trap first: from here on, every normal exit and error path stops and verifies
-# the session. A SIGKILL or a crashed shell runs no trap and can still leak one.
+# Snapshot what was already running. Cleanup is judged by set difference, not by
+# one captured id: a probe session can spawn a second background session, and
+# stopping only the id we saw would leave that one running while reporting
+# success. Anything background that was not here before must be gone after.
+PRE_BG="$(background_ids)" \
+  || { echo "CLEANUP UNVERIFIED: cannot read background sessions before probe 1" >&2; exit 1; }
+
+# Trap first: from here on, every normal exit and error path stops and verifies.
+# A SIGKILL or a crashed shell runs no trap and can still leak a session.
 SESSION_ID=""
 cleanup() {
-  local rc=$? stop_status agents_status
-  # If we died between starting the session and recording its id, recover the
-  # id from the probe output rather than leaking a live background session.
-  [ -n "$SESSION_ID" ] || SESSION_ID="$(session_id_from "${probe_out:-}")"
-  [ -n "$SESSION_ID" ] || exit "$rc"
-
-  # Stop is best-effort -- the session may already have ended -- but its status
-  # is reported, never silently dropped. Absence is the authority.
-  if stop_out="$("$PROBE_BIN" stop "$SESSION_ID" </dev/null 2>&1)"; then stop_status=0; else stop_status=$?; fi
-
-  # Read back separately, and refuse to conclude anything if the read failed.
-  # No pipe: `agents --json | grep -q` would let a failed read look like
-  # absence, and under pipefail a *matched* id makes grep exit early, the
-  # producer take SIGPIPE, and the pipeline report failure -- inverting the
-  # check precisely when the session is still there.
-  if agents_out="$("$PROBE_BIN" agents --json </dev/null 2>&1)"; then agents_status=0; else agents_status=$?; fi
-  if [ "$agents_status" -ne 0 ]; then
-    printf 'CLEANUP UNVERIFIED: agents --json failed (exit %s): %s\n' "$agents_status" "$agents_out" >&2
-    printf '  session %s may still be running; stop exited %s\n' "$SESSION_ID" "$stop_status" >&2
+  local rc=$? stop_out stop_status post leaked
+  [ -n "$SESSION_ID" ] || SESSION_ID="$(session_ids_from "${probe_out:-}" | head -n 1)"
+  if [ -n "$SESSION_ID" ]; then
+    # `claude stop` wants the short id, rejects the full uuid, and exits 0 even
+    # when it matched nothing -- so its status proves nothing and its output is
+    # printed rather than trusted. Absence is the authority.
+    if stop_out="$("$PROBE_BIN" stop "$SESSION_ID" </dev/null 2>&1)"; then stop_status=0; else stop_status=$?; fi
+    printf 'stop: exit=%s %s\n' "$stop_status" "$stop_out"
+  fi
+  if ! post="$(background_ids)"; then
+    printf 'CLEANUP UNVERIFIED: cannot read background sessions after stop; %s may still be running\n' \
+      "${SESSION_ID:-<no id captured>}" >&2
     exit 1
   fi
-  case "$agents_out" in
-    *"$SESSION_ID"*)
-      printf 'CLEANUP FAILED: session %s still present (stop exited %s)\n' "$SESSION_ID" "$stop_status" >&2
-      exit 1 ;;
-  esac
-  printf 'cleanup=verified (%s absent)\n' "$SESSION_ID"
+  leaked="$(PRE="$PRE_BG" POST="$post" python3 -c '
+import os
+pre = set(filter(None, os.environ["PRE"].splitlines()))
+post = set(filter(None, os.environ["POST"].splitlines()))
+print("\n".join(sorted(post - pre)))
+')"
+  if [ -n "$leaked" ]; then
+    printf 'CLEANUP FAILED: background session(s) left running that were not there before:\n%s\n' "$leaked" >&2
+    exit 1
+  fi
+  printf 'cleanup=verified (no new background session remains)\n'
   exit "$rc"
 }
 trap cleanup EXIT
@@ -401,9 +432,11 @@ run_probe "$PROBE_BIN" --plugin-dir "$PWD/dev/plugins/mattpocock-skills" -- --bg
 printf '%s\n' "$probe_out" | grep -v '^Permission deny rule' || true
 [ "$probe_status" -eq 0 ] \
   || { printf 'PROBE 1 CHANGED: expected exit 0, got %s\n' "$probe_status" >&2; exit 1; }
-SESSION_ID="$(session_id_from "$probe_out")"
-[ -n "$SESSION_ID" ] \
-  || { echo "PROBE 1 CHANGED: no background session started -- the CLI may now honour \`--\`" >&2; exit 1; }
+mapfile -t PROBE1_IDS < <(session_ids_from "$probe_out")
+[ "${#PROBE1_IDS[@]}" -eq 1 ] \
+  || { printf 'PROBE 1 CHANGED: expected exactly one "backgrounded · <id>" line, found %s\n' \
+       "${#PROBE1_IDS[@]}" >&2; exit 1; }
+SESSION_ID="${PROBE1_IDS[0]}"
 echo "probe1=confirmed (session $SESSION_ID)"
 ```
 
@@ -441,6 +474,30 @@ session record behind, so the absence check can no longer tell a stopped session
 from one that was never cleaned up. `claude stop` is absent from
 `claude --help`'s command list but is real — see "`claude --help` is not the
 authoritative flag surface" below, the same trap in a different place.
+
+Four things about session identity and `stop`, all observed at 2.1.226 while
+building this, and all load-bearing for the code above:
+
+- **The `backgrounded · <id>` id is a prefix, not the session id.** The line
+  prints `d43d174d`; `agents --json` reports
+  `d43d174d-…-…-…-…`. Comparing the short id to `sessionId` for
+  *equality* would report a live session as absent, so the check matches by
+  prefix — and, more importantly, does not depend on that match at all (below).
+- **`claude stop` wants the short id and rejects the full uuid**, answering
+  `No job matching '<uuid>'`. The obvious hardening — resolve to the full id,
+  then stop that — does not work.
+- **`claude stop` exits 0 even when it matched nothing.** Its status is not
+  evidence, which is why it is printed and then ignored in favour of a re-read.
+- **A probe session can spawn a second background session.** One did, while
+  this section was being written: stopping the captured id left a second
+  session running under a name derived from the work it had picked up. A
+  cleanup check that only asks "is my id gone?" answers yes and leaves that one
+  running.
+
+That last one is why cleanup is judged by set difference — background sessions
+present after, minus those present before — rather than by the captured id. The
+id is still used to *stop* the session, but it is not what proves the machine is
+clean, so a mis-parsed or unparsed id can no longer produce a false pass.
 
 The absence check deliberately reads `agents --json`, not `agents --json --all`.
 A stopped session is *finished*, not erased — `claude stop` keeps its
@@ -489,48 +546,54 @@ print(re.findall(r'\`\`\`bash\\n(.*?)\`\`\`', s, re.S)[0])
 Run whole against the operational CLI, probe 1 included:
 
 ```
+$ claude agents --json | python3 -c "import json,sys; print([s['sessionId'] for s in json.load(sys.stdin) if s.get('kind')=='background'] or 'none')"
+none
+
 $ bash probe.sh
 binary=/opt/node22/bin/claude version=2.1.226
 Error: Input must be provided either through stdin or as a prompt argument when using --print
 probe2=confirmed
 Starting background service…
-backgrounded · 0f51b8d9
+backgrounded · d43d174d
   claude agents             list sessions
-  claude attach 0f51b8d9    open in this terminal
-  claude logs 0f51b8d9      show recent output
-  claude stop 0f51b8d9      stop this session
-probe1=confirmed (session 0f51b8d9)
-cleanup=verified (0f51b8d9 absent)
+  claude attach d43d174d    open in this terminal
+  claude logs d43d174d      show recent output
+  claude stop d43d174d      stop this session
+probe1=confirmed (session d43d174d)
+stop: exit=0 stopped d43d174d
+cleanup=verified (no new background session remains)
 $ echo $?
 0
+
+$ claude agents --json | python3 -c "
+import json,sys
+d=json.load(sys.stdin)
+print('background:', [s['sessionId'] for s in d if s.get('kind')=='background'] or 'none')
+print('any id starting d43d174d:', any(s.get('sessionId','').startswith('d43d174d') for s in d))
+"
+background: none
+any id starting d43d174d: False
 ```
 
-Cleanup was confirmed a second time, from outside the script: `claude agents
---json` afterwards listed only the operator's own interactive session, with no
-trace of `1a5e2450`. Under `--all` the id does still appear, as a *completed*
-session — that is the expected result described above, not a leak.
+The external check names the same session as the run above it, so it corroborates
+this entry rather than an earlier one.
 
-Before this entry the fail-closed logic had only ever run against a stub. That
-check is still worth keeping, because a real run cannot make the CLI misbehave
-on demand, and a script that only ever passes proves nothing:
+The fail-closed paths cannot be exercised against a CLI that is behaving, so they
+are checked against a stub — the technique `tests/test_dev_session.py` already
+uses. Put a fake `claude` earlier on `PATH` than the real one:
 
 | Stub behaviour | Result |
 | :--- | :--- |
 | clusters no longer engage `--print` | `PROBE 2 CHANGED`, exit 1 |
-| `--` honoured, no session starts | `PROBE 1 CHANGED`, exit 1 |
-| `stop` silently fails | `CLEANUP FAILED: session … still present`, exit 1 |
-| `agents --json` itself fails | `CLEANUP UNVERIFIED: agents --json failed`, exit 1 |
+| `--` honoured, no session starts | `PROBE 1 CHANGED: found 0`, exit 1 |
+| message reworded to `backgrounded service` | `PROBE 1 CHANGED: found 0`, exit 1 — no stray id stopped |
+| two `backgrounded` lines | `CLEANUP FAILED`, names the second session, exit 1 |
+| probe session spawns a second background session | `CLEANUP FAILED`, names the spawned session, exit 1 |
+| `stop` silently fails | `CLEANUP FAILED`, names the surviving session, exit 1 |
+| `agents --json` errors | `CLEANUP UNVERIFIED`, exit 1 |
+| `agents --json` returns malformed JSON | `CLEANUP UNVERIFIED` with the parse error, exit 1 |
 | probe 1 exits non-zero but still prints an id | `PROBE 1 CHANGED: expected exit 0, got 3`, exit 1 |
 | version `2.1.226junk`, `2.1`, or `2.1.226-beta.1` | rejected, exit 1 |
-| version `2.1.226` | accepted |
-
-The stub is the technique `tests/test_dev_session.py` already uses. Reproduce it
-by putting a fake `claude` earlier on `PATH` than the real one.
-
-Also confirmed in the same run, since cleanup depends on it: `claude stop <id>`
-exists at 2.1.226, despite being absent from `claude --help`'s command list. The
-background session's own start-up text advertises it, which is a second place
-the help output is not the authority.
 
 #### If either outcome changes
 
