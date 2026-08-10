@@ -81,11 +81,10 @@ The cloud setup is intentionally not a repository plugin declaration.
 - Skills guide decisions; scripts enforce deterministic invariants.
 - No artifact may imply that future profitability is proven.
 
-See `docs/capability-map.md` for the owner, inputs, outputs, and blocking
-conditions of every required capability.
-
-See `docs/tooling-recommendations.md` for the recommended dependency sequence
-and `docs/source-evaluation.md` for the full source-linked project comparison.
+ADR-0008 parked the capability map, the tooling recommendations, the source
+evaluation, and the scheduled-task specification as part of the MVP reduction.
+They are not in the working tree; retrieve them from the `pre-mvp-freeze` tag
+under the ADR-0008 re-entry rule if you need them.
 
 ## Validation
 
