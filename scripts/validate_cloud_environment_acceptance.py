@@ -39,8 +39,10 @@ def pending_receipt():
         "setupScriptDigestMatched": False,
         "firstSessionDirectInvocation": False,
         "firstSessionSubagentInvocation": False,
+        "firstSessionConfigPointerLoaded": False,
         "firstSessionSetupRan": False,
         "cachedSessionDirectInvocation": False,
+        "cachedSessionConfigPointerLoaded": False,
         "cachedSessionSetupSkipped": False,
         "firstSessionUrl": "",
         "cachedSessionUrl": "",
@@ -61,8 +63,10 @@ def validate(receipt):
     boolean_fields = (
         "firstSessionDirectInvocation",
         "firstSessionSubagentInvocation",
+        "firstSessionConfigPointerLoaded",
         "firstSessionSetupRan",
         "cachedSessionDirectInvocation",
+        "cachedSessionConfigPointerLoaded",
         "cachedSessionSetupSkipped",
         "setupScriptDigestMatched",
     )

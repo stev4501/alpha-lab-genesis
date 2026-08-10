@@ -25,6 +25,8 @@ class TestCloudEnvironmentAcceptanceValidator(unittest.TestCase):
     def test_pending_receipt_fails(self):
         receipt = MODULE.pending_receipt()
         self.assertIn("status must be verified", MODULE.validate(receipt))
+        self.assertFalse(receipt["firstSessionConfigPointerLoaded"])
+        self.assertFalse(receipt["cachedSessionConfigPointerLoaded"])
 
     def test_complete_receipt_passes(self):
         receipt = MODULE.pending_receipt()
@@ -37,7 +39,9 @@ class TestCloudEnvironmentAcceptanceValidator(unittest.TestCase):
                 "setupScriptDigestMatched": True,
                 "firstSessionDirectInvocation": True,
                 "firstSessionSubagentInvocation": True,
+                "firstSessionConfigPointerLoaded": True,
                 "cachedSessionDirectInvocation": True,
+                "cachedSessionConfigPointerLoaded": True,
                 "firstSessionUrl": "https://claude.ai/code/session/first",
                 "cachedSessionUrl": "https://claude.ai/code/session/cached",
                 "firstSessionSetupRan": True,
@@ -90,6 +94,38 @@ class TestCloudEnvironmentAcceptanceValidator(unittest.TestCase):
             "firstSessionDirectInvocation must be boolean true",
             MODULE.validate(receipt),
         )
+
+    def test_config_pointer_attestations_must_be_boolean_true(self):
+        base = MODULE.pending_receipt()
+        base.update(
+            {
+                "status": "verified",
+                "verifiedAt": "2026-08-09T19:00:00Z",
+                "networkAccess": "Trusted",
+                "setupScriptSha256": MODULE.setup_script_sha256(),
+                "setupScriptDigestMatched": True,
+                "firstSessionDirectInvocation": True,
+                "firstSessionSubagentInvocation": True,
+                "firstSessionConfigPointerLoaded": True,
+                "firstSessionSetupRan": True,
+                "cachedSessionDirectInvocation": True,
+                "cachedSessionConfigPointerLoaded": True,
+                "cachedSessionSetupSkipped": True,
+                "firstSessionUrl": "https://claude.ai/code/one",
+                "cachedSessionUrl": "https://claude.ai/code/two",
+            }
+        )
+        for field in (
+            "firstSessionConfigPointerLoaded",
+            "cachedSessionConfigPointerLoaded",
+        ):
+            for value in (False, 1, None):
+                with self.subTest(field=field, value=value):
+                    receipt = {**base, field: value}
+                    self.assertIn(
+                        f"{field} must be boolean true",
+                        MODULE.validate(receipt),
+                    )
 
     def test_changed_setup_script_digest_fails(self):
         receipt = MODULE.pending_receipt()

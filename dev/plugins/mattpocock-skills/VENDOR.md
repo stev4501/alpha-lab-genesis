@@ -34,9 +34,11 @@ these skills (`implement`, `prototype`, `research`, `to-tickets`, `wizard`)
 push an agent toward starting new self-directed work, which that mandate
 forbids.
 
-`dev/plugins/` is not a discovery path. The plugin loads only when a session is
-started with an explicit `--plugin-dir` flag, which `bin/dev-session` supplies
-and `loop/run_session.sh` does not.
+`dev/plugins/` is not a discovery path. The vendored copy is the reviewed source
+and provenance reference. Supervised sessions receive the matching pinned plugin
+through the dedicated **Alpha Lab Dev** cloud environment;
+`loop/run_session.sh` does not use that environment and strips skills
+independently.
 
 See `docs/dev-only-skills.md` for the full rationale and the enforcement layers.
 
@@ -69,7 +71,8 @@ without any change here. Check for drift with:
 
 The cloud-environment route in `dev/cloud/setup-mattpocock-skills.sh` does not
 use the official marketplace. It creates an environment-local marketplace and
-pins its HTTPS source directly to the commit recorded above.
+pins its HTTPS source directly to the commit recorded above. This is the sole
+supported delivery route.
 
 ## Do not
 
