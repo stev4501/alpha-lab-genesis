@@ -49,32 +49,41 @@ for l in needs-triage needs-info ready-for-agent ready-for-human; do
 done
 ```
 
-**Cloud and web sessions**, where `gh` is not installed (see
-`issue-tracker.md`) and the GitHub MCP server offers `get_label` but no
-create-or-update tool. Call the REST API directly — `GH_TOKEN` is present in the
-environment and authenticates through the agent proxy:
+**Cloud and web sessions**, where `gh` is not installed. Label creation is one
+of the operations the GitHub MCP server does not cover — it offers `get_label`
+but no create-or-update tool — so this is the REST fallback that
+`issue-tracker.md` authorises under "REST fallback in cloud sessions, narrowly
+scoped". Read those conditions before using it; the same file's table is where
+a newly discovered gap gets recorded. `GH_TOKEN` is present in the environment
+and authenticates through the agent proxy.
 
 ```bash
 set -e
 API="https://api.github.com/repos/stev4501/alpha-lab-genesis/labels"
-create() {  # name colour description
+payload() {  # name colour description
+  python3 -c 'import json,sys; print(json.dumps({"name":sys.argv[1],"color":sys.argv[2],"description":sys.argv[3]}))' "$1" "$2" "$3"
+}
+ensure_label() {  # name colour description -- creates, or updates if present
   code=$(curl -sS -o /tmp/label.json -w '%{http_code}' -X POST "$API" \
     -H "Authorization: Bearer ${GH_TOKEN}" \
     -H "Accept: application/vnd.github+json" \
-    -d "$(python3 -c 'import json,sys; print(json.dumps({"name":sys.argv[1],"color":sys.argv[2],"description":sys.argv[3]}))' "$1" "$2" "$3")")
+    -d "$(payload "$1" "$2" "$3")")
   # 422 means it already exists; PATCH it to the canonical colour/description.
   [ "$code" = "422" ] && code=$(curl -sS -o /tmp/label.json -w '%{http_code}' \
     -X PATCH "$API/$1" \
     -H "Authorization: Bearer ${GH_TOKEN}" \
     -H "Accept: application/vnd.github+json" \
-    -d "$(python3 -c 'import json,sys; print(json.dumps({"name":sys.argv[1],"color":sys.argv[2],"description":sys.argv[3]}))' "$1" "$2" "$3")")
+    -d "$(payload "$1" "$2" "$3")")
   case "$code" in 200|201) echo "ok $1" ;; *) echo "FAILED $1 -- HTTP $code"; return 1 ;; esac
 }
-create needs-triage    fbca04 'Maintainer needs to evaluate this issue'
-create needs-info      d4c5f9 'Waiting on reporter for more information'
-create ready-for-agent 0e8a16 'Fully specified, ready for an AFK agent'
-create ready-for-human 1d76db 'Requires human implementation'
+ensure_label needs-triage    fbca04 'Maintainer needs to evaluate this issue'
+ensure_label needs-info      d4c5f9 'Waiting on reporter for more information'
+ensure_label ready-for-agent 0e8a16 'Fully specified, ready for an AFK agent'
+ensure_label ready-for-human 1d76db 'Requires human implementation'
 ```
+
+Confirm the result with `mcp__github__get_label` for each name afterwards, per
+the read-back condition — the labels above were verified that way.
 
 In both recipes, failures are deliberately **not** suppressed: an auth,
 permission, network, or wrong-repo error must surface, because a silently

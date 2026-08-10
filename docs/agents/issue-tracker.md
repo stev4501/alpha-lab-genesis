@@ -34,6 +34,33 @@ Which tool depends on where the session runs.
 
 Check with `command -v gh` before assuming the CLI is available.
 
+### REST fallback in cloud sessions, narrowly scoped
+
+The MCP tool set does not cover every operation these skills need. Where it
+does not, and only there, call the GitHub REST API directly with `curl`,
+authenticating with the `GH_TOKEN` already present in the session environment;
+it reaches `api.github.com` through the agent proxy. Conditions, all of them:
+
+- **MCP wins wherever it reaches.** Use REST only when no `mcp__github__*`
+  tool covers the operation — verify by looking, not by assuming. Convenience
+  is not a reason; an MCP tool that is merely more awkward still wins.
+- **Read back through MCP.** Where an MCP read exists for what you wrote,
+  confirm the result with it, so the write is verified by something other than
+  the tool that performed it.
+- **Never print the token**, in command output, logs, commit messages, or
+  issue comments. Redact API responses before echoing them.
+- **Record the gap here** when you hit a new one, so the list below stays the
+  authoritative account of where MCP falls short.
+
+Known gaps:
+
+| Operation | Why REST | MCP equivalent |
+| :--- | :--- | :--- |
+| Create or update a label | `/triage` applies labels, which fails if the label does not exist | `get_label` reads; there is no create or update tool |
+
+The label recipe itself lives in `triage-labels.md`, next to the label
+definitions it depends on.
+
 ## Conventions
 
 - **Create an issue**: `gh issue create --title "..." --body "..."`. Use a
