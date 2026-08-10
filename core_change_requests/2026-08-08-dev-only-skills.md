@@ -5,7 +5,9 @@
 - Requires sealed changes: no
 - Status: **Part A applied** to `loop/run_session.sh` on 2026-08-09 at the
   operator's explicit direction during review of PR #3. **Part B is blocked**
-  pending an explicit ADR-0009 amendment — do not apply it before then.
+  pending an explicit ADR-0009 amendment — do not apply it before then, and
+  do not apply the attached patch at all: half of what it protects no longer
+  exists. See "Part B status 2026-08-10" below.
 - Requires protected-path changes: Part A touched `loop/` (done); Part B would
   touch `loop/`, `.claude/`, and `CODEOWNERS`.
 - Related: `backlog/BL-0006-scope-agent-deny-rules.md`, `docs/adr/0009-agent-owned-operations.md`,
@@ -105,8 +107,76 @@ all, so removing it changes no current behaviour.
 ## Part B — BLOCKED pending an ADR-0009 amendment
 
 **Patch:** `core_change_requests/patches/2026-08-08-b-protect-dev-bin.diff`
-(verified with `git apply --check`) — covers `validate_session.sh`, both loop
-prompts, `.claude/settings.json`, and `CODEOWNERS` in one commit.
+(verified with `git apply --check` *as of 2026-08-08*) — covers
+`validate_session.sh`, both loop prompts, `.claude/settings.json`, and
+`CODEOWNERS` in one commit.
+
+### Part B status 2026-08-10: half moot, half still open, patch stale
+
+Reviewed in a supervised session while closing out the open change requests.
+Part B protects two paths, and they have diverged:
+
+- **`bin/` — moot.** PR #27 (`4b1551a`) deleted `bin/dev-session` when the
+  Alpha Lab Dev cloud environment became the sole route to the developer
+  skills. There is no `bin/` to protect. The patch's `Edit(bin/**)`,
+  `Write(bin/**)`, and `/bin/ @stev4501` lines would now protect a path that
+  does not exist, and its `PROTECTED` regex and both prompt edits name `bin/`
+  in prose the agent reads.
+- **`dev/` — still open, and still the real question.** `dev/plugins/`
+  (the vendored `mattpocock-skills` tree) and `dev/cloud/` are both live and
+  both still agent-space. The governance argument below is unchanged by PR
+  #27: a third-party vendored tree and the cloud setup script are content
+  that should change under review, and neither is in ADR-0009's enumerated
+  human-owned set.
+
+So Part B is **not** simply obsolete, and it is also not applicable as
+written. Anyone picking it up should regenerate the patch for `dev/` alone
+and drop every `bin/` reference — and should still get the ADR-0009
+amendment first, because narrowing the patch does not change what it is:
+an addition to the human-owned enumeration, which is a governance decision.
+
+The coherent alternative named at the end of this section — that vendored dev
+tooling is neither core nor the agent's forward motion, so it should stay in
+agent-space and Part B should be dropped outright — also remains available.
+But one plausible argument for it does **not** survive checking, and the check
+is worth recording because it cuts the other way.
+
+`dev/cloud/setup-mattpocock-skills.sh` is digest-pinned: the receipt carries
+`setupScriptSha256`, and `scripts/validate_cloud_environment_acceptance.py`
+rejects a mismatch. It is tempting to conclude that the script is therefore
+self-defending and needs no path protection. It is not, on the path that
+matters:
+
+```
+$ echo "# corrupted by a hypothetical session" >> dev/cloud/setup-mattpocock-skills.sh
+$ python scripts/validate_repository.py                       # valid,  exit 0
+$ python -m unittest discover -s tests                         # 78 tests, OK
+$ python scripts/validate_cloud_environment_acceptance.py      # FAILS,  exit 1
+```
+
+`loop/validate_session.sh` runs the first two and not the third
+(`validate_session.sh:143,151`). The digest check lives in
+`.github/workflows/cloud-environment-acceptance.yml`, which triggers on
+`pull_request` only — and under ADR-0009 the loop pushes straight to `main`
+and opens no pull request. So an autonomous session that edited the setup
+script would pass its own validation, reach `main`, and change what the next
+cloud environment installs, with the one control that would have caught it
+never running.
+
+`tests/test_cloud_environment_acceptance.py` does not close this: its cases
+build synthetic receipts around `MODULE.setup_script_sha256()`, so they prove
+the validator rejects a mismatch — they never compare the committed receipt to
+the committed script.
+
+That makes the `dev/` half of Part B stronger than when it was written, not
+weaker. It is still a governance decision and still needs the ADR-0009
+amendment; but "the digest already protects it" is not an argument available
+to whoever takes that decision. The cheap alternative, if Part B is dropped,
+is to run the acceptance validator on the session path too — a one-line
+addition to `validate_session.sh`, itself a protected file.
+
+Not decided here. Part A does not depend on it, and nothing is blocked by
+leaving it open.
 
 Today `dev/plugins/` and `bin/` are agent-space: an autonomous session could
 rewrite a vendored skill body or the session wrapper. It cannot *load* those

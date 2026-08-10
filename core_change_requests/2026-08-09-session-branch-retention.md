@@ -3,7 +3,13 @@
 - Origin: supervised session, 2026-08-09, after the operator ran `session.yml`
   by `workflow_dispatch` and observed that the branch was still on the remote
   when the session ended
-- Status: **proposed** — nothing applied. Patch attached and verified.
+- Status: **APPLIED 2026-08-10** in a supervised session, at the operator's
+  direction, **plus one round-4 fix** — a code review of the applied change
+  found that the retention windows fail *open* on a malformed value, which
+  inverts the policy this request exists to set. The attached patch has been
+  regenerated to include the fix, so document and code still agree; it is no
+  longer the byte-for-byte artifact reviewed in rounds 1-3. See "Review round
+  4" and "Decided 2026-08-10" below.
   Revised 2026-08-09 after review rounds 1-3 on PR #13; see those sections.
 - Requires sealed changes: no
 - Requires protected-path changes: yes (`loop/`, `.github/`) — human applies
@@ -380,6 +386,143 @@ flips the next session into maintenance mode.
 5. **`failed/2026-08-09-0505` specifically.** It is independent of all of the
    above. It holds nothing, `HANDOFF.md` says so, and deleting it by hand today
    costs nothing and waits on no approval.
+
+## Review round 4 (2026-08-10, after applying)
+
+One finding, and it is the same shape as rounds 2 and 3: a failure that
+presents as an uneventful success. Those two hardened the *output* paths — the
+push, the re-query, the enumeration. Nobody had looked at the *input* path.
+
+`EMPTY_RETENTION_DAYS` and `WORK_RETENTION_DAYS` arrive from workflow env and
+are used only in `[[ ]]` arithmetic. That context fails **open** on a value it
+cannot parse: `[[ "7d" -gt 0 ]]` does not abort under `set -e` — it prints an
+error and evaluates false. With `WORK_RETENTION_DAYS="7d"`, all three guards
+that depend on it evaluate false at once:
+
+- the policy warning stays silent;
+- the `[[ "$limit" -le 0 ]]` retain-forever guard is skipped;
+- the `[[ "$age_days" -lt "$limit" ]]` age guard is skipped.
+
+So the branch reaches the delete path **at any age**, and the run exits 0.
+Demonstrated against the synthetic remote — the work-bearing branch flips from
+
+```
+KEEP   failed/2020-02-02-0202 — 1 unique commit(s); WORK_RETENTION_DAYS=0 retains rejected work indefinitely
+```
+
+to
+
+```
+WOULD  failed/2020-02-02-0202 — 1 unique commit(s), 2381d old, past 7dd
+```
+
+A typo in a protected workflow file silently inverts "never delete rejected
+work" into "delete it at any age" — the exact opposite of what this request
+sets out to guarantee, and a direct breach of `README.md`'s "Failed and
+discarded experiments are retained". The `past 7dd` in that line is the only
+tell, and it appears in a log nobody reads on a green run.
+
+Two things bound the blast radius but neither closes it: the journal guard
+still keeps a branch whose journal never reached `main`, and the shipped
+default of `0` is well-formed. The hole opens precisely when a human edits
+`WORK_RETENTION_DAYS` — which is the moment this request is designed for.
+
+**Fix:** validate both windows before anything is judged, and fail closed.
+Leading zeros are rejected rather than tolerated, because `[[ ]]` reads them as
+octal and that fails in both directions: `08` and `09` are invalid octal and
+fail open exactly like `7d`, while `010` parses fine and silently means 8. A
+window that quietly means something other than what the workflow says is worse
+than one that refuses to start.
+
+Verified: `7d`, `abc`, `-1`, `08`, `09`, `007`, `010`, `" 7"`, `"7 "`, `1e3`,
+and a command-substitution payload all exit 1 before any branch is evaluated;
+`0`, `7`, `90`, `365` all run normally. `[[ ]]` evaluates array subscripts, so
+the injection case is not hypothetical.
+
+The attached patch was regenerated to include this, and reproduces the applied
+tree byte-for-byte at mode 755 from a clean `origin/main` worktree.
+
+### Two things left as findings rather than fixed
+
+- **The journal-name contract is divergent.** This script requires
+  `journals/<id>.md` exactly; `loop/validate_session.sh:167` accepts any added
+  file whose name merely *contains* the session id, and `journals/` already
+  holds both shapes (`2026-08-09-0525.md` and
+  `2026-08-09-deny-rule-scoping.md`). A journal named `<id>-topic.md` passes
+  validation but is invisible to the pruner's guard. It fails safe — the
+  branch is kept — but two files now state one rule differently. Reconciling
+  them means editing `validate_session.sh`, which is its own request.
+- **`removed` counts branches that were not removed** on the dry-run path.
+  Cosmetic; left alone to keep the divergence from the reviewed artifact as
+  small as the defect required.
+
+## Decided 2026-08-10 (supervised session)
+
+The operator directed that this request be applied. Questions 1-3 were taken
+at the shipped defaults, which is the posture the patch already encoded.
+Questions 4 and 5 have no shipped default — 4 was deferred and 5 was decided
+against the request's own recommendation, so both are recorded as decisions
+taken rather than defaults accepted:
+
+1. **Rejected work is never deleted.** `WORK_RETENTION_DAYS` stays 0.
+   `README.md`'s source-of-truth rule is not amended, and nothing in this
+   change asks it to be. The positive-value path ships dormant and warns in
+   the run log if it is ever armed — and, after round 4, refuses to start at
+   all on a value that would have armed it by accident.
+2. **Empty window: 7 days**, as proposed.
+3. **Schedule stays commented out.** Manual dispatch only, following
+   `session.yml`'s precedent.
+4. **Deferred, not answered.** The policy is recorded here, in this document.
+   The ADR-0008 amendment or ADR-0010 the request suggests was *not* written.
+   This is the one question the request asked that this session did not close
+   — see the note below.
+5. **Decided against the request's recommendation.**
+   `failed/2026-08-09-0505` was *not* hand-deleted. The request says it
+   "costs nothing and waits on no approval", and its facts hold — the branch
+   is confirmed empty (`git rev-list --count origin/main..d162587` is 0). It
+   was retained anyway: it is one day old and therefore inside the 7-day
+   window, and letting the mechanism this request adds collect it on its
+   first real run is a better proof of the rule than a manual deletion that
+   bypasses it. Recorded plainly because it reverses a recommendation rather
+   than accepting a default, and a later reader should not mistake it for
+   the latter.
+
+Still open after this: decision 4's *placement*. The retention rule now
+exists in code and in this document, but a reader arriving at ADR-0008's exit
+criterion 2 will not find it. That is a one-paragraph amendment and a
+governance call the operator has not yet made.
+
+### Independent verification before applying
+
+The synthetic-remote exercise described under "Verification" was reproduced
+from scratch in the applying session rather than taken on trust — one branch
+of each shape against a real bare remote, with the races injected through a
+`git` shim and a `pre-receive` hook:
+
+- default posture deletes only the empty branch; `main` and `unmerged/*`
+  untouched;
+- `WORK_RETENTION_DAYS=90` arms the work-bearing path, and the journal guard
+  still keeps the branch whose journal is absent from `main`;
+- work landing between enumeration and deletion loses the lease, survives,
+  and the run exits 0;
+- a failed enumeration is fatal rather than a tidy `0 deleted, 0 kept`;
+- a `pre-receive` hook that rejects the deletion **while printing the phrase
+  `stale info`** is correctly reported as an error and exits 1 — the round-3
+  finding, confirmed against the behaviour that would have laundered it.
+
+`python scripts/validate_repository.py` is valid and the test suite is 78
+tests, OK. Note that it was run here with `python -m unittest discover -s
+tests`, not `pytest`: `loop/validate_session.sh:151` invokes
+`python -m pytest tests -q`, and `pytest` is not installed in the Alpha Lab
+Dev cloud environment. Same test files, different runner — but the runner the
+loop actually uses was not the one exercised here.
+
+What this exercise did **not** cover, and should have: any malformed value for
+the two retention windows. Every case above varies the *remote*; none varies
+the *input*. That gap is exactly where round 4's finding was hiding, and it is
+worth stating as a lesson about the shape of this verification rather than
+quietly fixing — a test matrix that only perturbs one side of a program will
+keep finding defects on that side only.
 
 ## How to apply
 

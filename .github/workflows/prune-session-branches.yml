@@ -1,0 +1,56 @@
+name: prune-session-branches
+
+# Manual trigger only for now. The schedule below is intentionally left
+# commented, exactly as session.yml was: a human enables it after
+# workflow_dispatch runs prove the rules select the branches they are meant to
+# and nothing else.
+#
+# The dispatch input defaults to a dry run. On the schedule event `inputs` is
+# empty, so the guarded expression below evaluates to false and a scheduled run
+# deletes for real — deliberate, and the reason to leave the schedule off until
+# a dry run has been read.
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "List what would be deleted without deleting it"
+        type: boolean
+        default: true
+
+  # To enable weekly pruning, uncomment the two lines below. They belong HERE,
+  # nested under this same `on:` mapping. A second top-level `on:` key does not
+  # merge with this one — YAML keeps the last, which would silently drop the
+  # workflow_dispatch trigger above and leave a scheduled pruner with no manual
+  # trigger and no dry-run default.
+  # schedule:
+  #   - cron: "17 4 * * 0"      # Sundays 04:17 UTC, well clear of any session
+
+concurrency:
+  group: prune-session-branches   # NOT the research-session group: pruning must
+  cancel-in-progress: false       # never queue behind a 110-minute session
+
+permissions:
+  contents: write                 # required to delete a remote branch
+
+jobs:
+  prune:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          # fetch-depth: 0 is required: the script counts each failed/<id>
+          # branch's commits against main and reads journals/<id>.md out of
+          # origin/main, neither of which a shallow clone can answer.
+
+      - name: Prune failed session branches
+        env:
+          DRY_RUN: ${{ inputs.dry_run == true }}
+          EMPTY_RETENTION_DAYS: "7"
+          # 0 = never delete a failed branch that carries commits main lacks.
+          # Raising this opts into deleting rejected work and contradicts
+          # README.md's "Failed and discarded experiments are retained" until
+          # that rule is amended.
+          WORK_RETENTION_DAYS: "0"
+        run: bash loop/prune_branches.sh
