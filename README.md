@@ -41,23 +41,31 @@ alpha-lab-genesis/
 │   ├── experiment.schema.json
 │   └── data-manifest.schema.json
 ├── docs/adr/                   append-only design decisions
+├── docs/agents/                per-repo configuration for developer skills
+├── backlog/                    the autonomous loop's work queue, one file per item
+├── core_change_requests/       proposals for sealed or protected changes
+├── journals/                   one session record per run, never rewritten
+├── loop/                       session runner, validator, and prompts
 ├── strategies/                 versioned strategy definitions
+├── evaluator/                  the sealed evaluation clock and accounting
+├── data/                       content-addressed snapshots, raw pulls, provenance
+├── data_adapters/              read paths onto the snapshot registry
 ├── results/                    immutable experiment artifacts
-├── logs/                       run and tool logs
+├── reviews/                    independent review records
+├── logs/                       loop transcripts (gitignored); see logs/README.md
 ├── skills/                     core and agent-created skills
 ├── scripts/                    deterministic state-management utilities
 ├── dev/plugins/                vendored developer-only skill plugins
-├── bin/                        developer entrypoints
 └── tests/                      repository contract tests
 ```
 
 Third-party skills under `dev/plugins/` are for development, not for the
-autonomous loop. `bin/dev-session` loads them in a local terminal. The repository
-does not auto-install them in cloud or web sessions; supervised cloud use
-requires the environment-level setup documented in
-`docs/cloud-environment-dev-skills.md`. The loop's runner strips skills outright
-(`--disable-slash-commands`, `--disallowedTools "Skill"`), which is what would
-keep them unusable there if a delivery route is ever found.
+autonomous loop. The sole supported delivery route is the dedicated **Alpha Lab
+Dev** cloud environment documented in `docs/cloud-environment-dev-skills.md`.
+Its setup installs the pinned plugin and a user-level pointer to the repository
+configuration. The loop's runner strips skills outright
+(`--disable-slash-commands`, `--disallowedTools "Skill"`) and does not run in
+that environment.
 
 The cloud setup is intentionally not a repository plugin declaration.
 

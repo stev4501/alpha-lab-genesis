@@ -212,6 +212,10 @@ class TestCloudEnvironmentSetup(unittest.TestCase):
                 installed["plugins"][PLUGIN_ID][0]["gitCommitSha"],
                 UPSTREAM_SHA,
             )
+            memory = (config / "CLAUDE.md").read_text(encoding="utf-8")
+            self.assertIn("docs/agents/session-prompt.md", memory)
+            self.assertIn("supervised", memory)
+            self.assertIn("loop/run_session.sh", memory)
 
     def test_unexpected_marketplace_removal_error_fails_closed(self):
         with tempfile.TemporaryDirectory() as temp:
@@ -293,6 +297,34 @@ class TestCloudEnvironmentSetup(unittest.TestCase):
             self.assertNotEqual(result.returncode, 0)
             self.assertIn("symlinked setup path", result.stderr)
             self.assertFalse(outside.exists())
+
+    def test_user_memory_symlink_is_rejected_before_write(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            fake = self.make_fake_claude(root)
+            setup = self.make_setup_copy(root)
+            test_root = root / "alpha-lab-dev"
+            config = test_root / "claude-config"
+            outside = root / "outside-CLAUDE.md"
+            config.mkdir(parents=True)
+            outside.write_text("keep me", encoding="utf-8")
+            (config / "CLAUDE.md").symlink_to(outside)
+            env = {
+                **os.environ,
+                "CLAUDE_BIN": str(fake),
+                "CLAUDE_CONFIG_DIR": str(config),
+                "FAKE_CLAUDE_LOG": str(root / "claude.log"),
+            }
+            result = subprocess.run(
+                ["bash", str(setup)],
+                capture_output=True,
+                text=True,
+                env=env,
+                timeout=30,
+            )
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("symlinked setup path", result.stderr)
+            self.assertEqual(outside.read_text(encoding="utf-8"), "keep me")
 
     def test_missing_install_paths_fail_sha_binding(self):
         with tempfile.TemporaryDirectory() as temp:
@@ -381,7 +413,9 @@ class TestCloudEnvironmentSetup(unittest.TestCase):
         self.assertEqual(receipt.get("gitCommitSha"), UPSTREAM_SHA)
         self.assertIs(receipt.get("firstSessionDirectInvocation"), True)
         self.assertIs(receipt.get("firstSessionSubagentInvocation"), True)
+        self.assertIs(receipt.get("firstSessionConfigPointerLoaded"), True)
         self.assertIs(receipt.get("cachedSessionDirectInvocation"), True)
+        self.assertIs(receipt.get("cachedSessionConfigPointerLoaded"), True)
         self.assertNotEqual(
             receipt.get("firstSessionUrl"),
             receipt.get("cachedSessionUrl"),

@@ -11,6 +11,7 @@ umask 022
 CLOUD_ROOT="/opt/alpha-lab-dev"
 
 EXPECTED_CONFIG_DIR="${CLOUD_ROOT}/claude-config"
+USER_MEMORY_FILE="${EXPECTED_CONFIG_DIR}/CLAUDE.md"
 MARKETPLACE_DIR="${CLOUD_ROOT}/marketplace"
 MARKETPLACE_FILE="${MARKETPLACE_DIR}/.claude-plugin/marketplace.json"
 if [[ -n "${CLAUDE_CONFIG_DIR:-}" && "$CLAUDE_CONFIG_DIR" != "$EXPECTED_CONFIG_DIR" ]]; then
@@ -25,6 +26,7 @@ export CLAUDE_CONFIG_DIR="$EXPECTED_CONFIG_DIR"
 for path in \
   "$CLOUD_ROOT" \
   "$CLAUDE_CONFIG_DIR" \
+  "$USER_MEMORY_FILE" \
   "$MARKETPLACE_DIR" \
   "$MARKETPLACE_DIR/.claude-plugin" \
   "$MARKETPLACE_FILE"
@@ -44,6 +46,28 @@ for dependency in "$CLAUDE_BIN" git python3; do
   command -v "$dependency" >/dev/null
 done
 mkdir -p "$CLAUDE_CONFIG_DIR" "$MARKETPLACE_DIR/.claude-plugin"
+
+MEMORY_TMP="$(mktemp "$CLAUDE_CONFIG_DIR/.CLAUDE.md.XXXXXX")"
+trap 'rm -f "$MEMORY_TMP"' EXIT
+cat > "$MEMORY_TMP" <<'MARKDOWN'
+# Alpha Lab Dev cloud environment
+
+This environment is for supervised development sessions.
+
+When the current repository contains `docs/agents/session-prompt.md`, read and
+follow that file before invoking a Matt Pocock engineering skill. It points the
+skills at the repository's issue tracker, triage vocabulary, and domain docs
+without placing those instructions in project memory that the autonomous loop
+would also read.
+
+The autonomous research workflow is launched by `loop/run_session.sh`. It does
+not use this cloud environment, and this user-level memory does not authorize
+changing that separation.
+MARKDOWN
+chmod 0644 "$MEMORY_TMP"
+mv -fT "$MEMORY_TMP" "$USER_MEMORY_FILE"
+MEMORY_TMP=""
+trap - EXIT
 
 MARKETPLACE_TMP="$(mktemp "$MARKETPLACE_DIR/.claude-plugin/.marketplace.json.XXXXXX")"
 trap 'rm -f "$MARKETPLACE_TMP"' EXIT

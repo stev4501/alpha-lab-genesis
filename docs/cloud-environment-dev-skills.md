@@ -34,14 +34,15 @@ on the same cache-stable plugin state.
 The script is self-contained because cloud-environment setup-script ordering
 does not guarantee that the repository is available before setup. It creates a
 local marketplace under `/opt`, registers it at user scope, installs the plugin,
-explicitly restores enablement on reruns, then fails closed unless the enabled
-`claude plugin list` entry points at the installed record carrying the expected
-SHA. The production paths are fixed beneath `/opt/alpha-lab-dev`; arbitrary,
-relative, root, and symlinked paths are rejected. The script does not broaden
-filesystem permissions. The first-session acceptance therefore also verifies
-that the later Claude process can read the root-created plugin state; if setup
-and runtime use incompatible identities, the environment is rejected rather
-than made world-writable.
+explicitly restores enablement on reruns, and writes a user-level `CLAUDE.md`
+that points Alpha Lab sessions at `docs/agents/session-prompt.md`. It then fails
+closed unless the enabled `claude plugin list` entry points at the installed
+record carrying the expected SHA. The production paths are fixed beneath
+`/opt/alpha-lab-dev`; arbitrary, relative, root, and symlinked paths are
+rejected. The script does not broaden filesystem permissions. The first-session
+acceptance therefore verifies that the later Claude process can read both the
+root-created plugin state and user memory; incompatible setup/runtime identities
+are rejected rather than made world-writable.
 
 ## What the setup installs
 
@@ -52,6 +53,7 @@ than made world-writable.
 | Source | `https://github.com/mattpocock/skills.git` |
 | Commit | `84fdeffd12f2ee307994d1eb6feb48173b6e0502` |
 | Scope | user scope inside the selected cloud environment |
+| User memory | `/opt/alpha-lab-dev/claude-config/CLAUDE.md` |
 
 The explicit HTTPS source avoids SSH host-key and credential dependencies. The
 plugin is pinned to the same upstream commit as
@@ -84,14 +86,21 @@ Use a completely new session, not a resumed one:
 3. Invoke `/mattpocock-skills:tdd`.
 4. Launch a fresh subagent whose tools include `Skill` and have it independently
    discover and invoke the TDD skill.
-5. Start a second new session in the same environment and repeat steps 1 and 3
-   to prove the cached environment remains usable when setup is skipped.
+5. Run `/memory` and confirm the user-level `CLAUDE.md` under
+   `CLAUDE_CONFIG_DIR` loaded. Before manually pointing at `docs/agents/`, ask
+   which issue tracker and domain docs the engineering skills should use; the
+   answer must identify `docs/agents/issue-tracker.md` and
+   `docs/agents/domain.md`, proving the startup pointer was followed.
+6. Start a second new session in the same environment and repeat steps 1, 3,
+   and 5 to prove the cached environment retains both plugin and pointer when
+   setup is skipped.
 
 Record distinct first-session and cached-session URLs, environment name, Claude
 Code version, **Trusted** network mode, repository setup-script SHA-256, whether
 the pasted setup text matches that reviewed script, whether setup ran or was
-skipped, direct invocation, subagent invocation, and a UTC verification
-timestamp in the protected acceptance receipt carried by the implementation PR.
+skipped, direct invocation, subagent invocation, fresh/cached configuration
+pointer loading, and a UTC verification timestamp in the protected acceptance
+receipt carried by the implementation PR.
 
 Before starting the first session, calculate the canonical digest:
 
