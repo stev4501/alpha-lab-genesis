@@ -41,9 +41,18 @@ alpha-lab-genesis/
 │   ├── experiment.schema.json
 │   └── data-manifest.schema.json
 ├── docs/adr/                   append-only design decisions
+├── docs/agents/                per-repo configuration for developer skills
+├── backlog/                    the autonomous loop's work queue, one file per item
+├── core_change_requests/       proposals for sealed or protected changes
+├── journals/                   one session record per run, never rewritten
+├── loop/                       session runner, validator, and prompts
 ├── strategies/                 versioned strategy definitions
+├── evaluator/                  the sealed evaluation clock and accounting
+├── data/                       content-addressed snapshots, raw pulls, provenance
+├── data_adapters/              read paths onto the snapshot registry
 ├── results/                    immutable experiment artifacts
-├── logs/                       run and tool logs
+├── reviews/                    independent review records
+├── logs/                       loop transcripts (gitignored); see logs/README.md
 ├── skills/                     core and agent-created skills
 ├── scripts/                    deterministic state-management utilities
 ├── dev/plugins/                vendored developer-only skill plugins

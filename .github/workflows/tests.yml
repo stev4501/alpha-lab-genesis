@@ -1,0 +1,36 @@
+name: tests
+
+# The two commands README.md calls "Validation". Until this workflow existed,
+# neither ran on a pull request: cloud-environment-acceptance.yml runs only the
+# acceptance receipt validator, and session.yml is workflow_dispatch. PR #27
+# therefore merged with exactly one green check that touched neither the test
+# suite nor the repository contract.
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      # jsonschema is the only non-stdlib import the contract tests need.
+      # Keep this in step with loop/run_session.sh's install line.
+      - name: Install deps
+        run: pip install jsonschema
+
+      - name: Repository contract
+        run: python scripts/validate_repository.py
+
+      - name: Test suite
+        run: python -m unittest discover -s tests -v

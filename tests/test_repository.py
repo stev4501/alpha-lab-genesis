@@ -130,6 +130,24 @@ class RepositoryContractTests(unittest.TestCase):
                 text = skill_path.read_text(encoding="utf-8")
                 self.assertIn("completion criterion", text.lower())
 
+    def test_pull_request_ci_runs_the_documented_validation_commands(self):
+        """README calls two commands "Validation"; CI must actually run both.
+
+        Before .github/workflows/tests.yml existed, neither ran on a pull
+        request: cloud-environment-acceptance.yml runs only the acceptance
+        receipt validator, and session.yml is workflow_dispatch. A merge could
+        therefore go green having exercised neither the contract nor the suite.
+        """
+        workflow = (ROOT / ".github" / "workflows" / "tests.yml").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("pull_request", workflow)
+        self.assertIn("python scripts/validate_repository.py", workflow)
+        self.assertIn("python -m unittest discover -s tests", workflow)
+        # A path filter would let a change to evaluator/ or scripts/ skip the
+        # only job that checks them.
+        self.assertNotIn("paths:", workflow)
+
     def test_daily_bar_pipeline_is_replayable_immutable_and_idempotent(self):
         with tempfile.TemporaryDirectory() as temporary:
             temp_root = Path(temporary) / "lab"
