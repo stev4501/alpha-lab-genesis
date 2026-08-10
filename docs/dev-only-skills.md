@@ -283,185 +283,166 @@ The unit tests run against a stubbed `CLAUDE_BIN` and therefore **cannot** prove
 anything about Claude's parser. Two behaviours the wrapper depends on are
 properties of the CLI, not of this repository.
 
+**Currently verified: 2.1.226** — probe 1 (`--` not honoured) on 2026-08-08,
+probe 2 (clusters engage `--print`) on 2026-08-10. Update this line on every
+run; the run log at the end of the section holds the history behind it.
+
 **Trigger:** any change to the operational Claude Code version — an upgrade, a
 downgrade, or a pinned version moving underneath you. This section carries its
 own trigger and the full procedure; nothing elsewhere needs to point at it for
 it to be run.
 
-#### Step 0 — pin the CLI under test, then read its version
+#### The probe harness
 
-Choose the CLI **once**, into a variable, and use that variable for every
-command in this procedure — probes, cleanup, and read-back alike:
-
-```bash
-# (a) the version already in use -- the ordinary case after an upgrade
-CLAUDE_BIN="$(type -P claude)" || { echo "claude not on PATH" >&2; exit 1; }
-case "$CLAUDE_BIN" in /*) ;; *) echo "not absolute: $CLAUDE_BIN" >&2; exit 1 ;; esac
-[ -x "$CLAUDE_BIN" ] || { echo "not executable: $CLAUDE_BIN" >&2; exit 1; }
-CLAUDE=("$CLAUDE_BIN")
-
-# (b) or a candidate, before adopting it
-CANDIDATE=2.1.230                                    # the version being evaluated
-NPX_BIN="$(type -P npx)" || { echo "npx not on PATH" >&2; exit 1; }
-CLAUDE=("$NPX_BIN" -y @anthropic-ai/claude-code@"$CANDIDATE")
-```
-
-Use `type -P`, not `command -v`. `command -v` reports whatever the *shell* would
-run, which in an interactive session may be an alias or a function — and an
-alias description is not a path you can execute:
+Save this as a script and run it. Do not paste it into an interactive shell: the
+guards call `exit`, which would close your session rather than abort the check.
 
 ```bash
-$ alias claude="echo nope"
-$ command -v claude
-alias claude='echo nope'
-$ type -P claude
-/opt/node22/bin/claude
+#!/usr/bin/env bash
+# Re-verify the two CLI behaviours bin/dev-session depends on.
+set -euo pipefail
+
+# Resolve the operational binary once, from PATH only. `type -P` skips aliases
+# and shell functions; `command -v` would return those, and an alias definition
+# is text, not a path you can execute.
+PROBE_BIN="$(type -P claude)" || { echo "claude not on PATH" >&2; exit 1; }
+case "$PROBE_BIN" in /*) ;; *) echo "not an absolute path: $PROBE_BIN" >&2; exit 1 ;; esac
+[ -x "$PROBE_BIN" ] || { echo "not executable: $PROBE_BIN" >&2; exit 1; }
+
+# Run a command, capturing output and status without tripping errexit: a probe
+# expected to fail must still be recordable. Stdin is closed so a scripted run
+# does not stall three seconds waiting for input it will never receive.
+run_probe() {
+  if probe_out="$("$@" </dev/null 2>&1)"; then probe_status=0; else probe_status=$?; fi
+}
+
+run_probe "$PROBE_BIN" --version
+[ "$probe_status" -eq 0 ] \
+  || { printf 'version lookup failed (exit %s): %s\n' "$probe_status" "$probe_out" >&2; exit 1; }
+PROBE_VERSION="${probe_out%% *}"
+case "$PROBE_VERSION" in
+  [0-9]*.[0-9]*.[0-9]*) ;;
+  *) printf 'unexpected version output: %s\n' "$probe_out" >&2; exit 1 ;;
+esac
+printf 'binary=%s version=%s\n' "$PROBE_BIN" "$PROBE_VERSION"
 ```
 
-`type -P` searches `PATH` only, so it skips aliases and functions. The two
-checks after it reject a relative `PATH` entry and a non-executable result, so
-what lands in `CLAUDE` is an absolute path to a real binary or the procedure
-stops. The `npx` launcher for route (b) is resolved the same way, so the
-candidate route pins its launcher too rather than re-resolving it per command.
+`PROBE_BIN` is deliberately **not** named `CLAUDE_BIN`: `bin/dev-session` reads
+`CLAUDE_BIN` from the environment as its test stub, so a developer who exported
+that name while following this procedure would repoint the very wrapper the
+probes exist to check.
 
-Then read the version **from that exact CLI**, and record both halves:
+What "version-pinned" means here: the binary is resolved once to an absolute
+path, the version is read **from that same binary**, and both are printed
+together. The probes below reuse `$PROBE_BIN` rather than the name `claude`, so
+a `PATH` change or an update landing mid-run cannot swap the binary underneath
+the version already recorded.
 
-```bash
-if raw="$("${CLAUDE[@]}" --version 2>&1)"; then status=0; else status=$?; fi
-[ "$status" -eq 0 ] || { printf 'version lookup failed (exit %s): %s\n' "$status" "$raw" >&2; exit 1; }
-VERSION="${raw%% *}"
-case "$VERSION" in [0-9]*.[0-9]*.[0-9]*) ;; *) echo "unexpected version: $raw" >&2; exit 1 ;; esac
-printf 'cli=%s version=%s\n' "${CLAUDE[*]}" "$VERSION"
-```
-
-Validate before parsing rather than piping into `awk`. A pipeline takes its
-status from the last stage, so `--version | awk '{print $1}'` succeeds even when
-the CLI itself failed, and an empty or partial `VERSION` gets logged as though
-the lookup worked. That is the same status-masking trap probe 2 documents below
-— it is worth stating twice because it reappears anywhere a command's output is
-parsed inline.
-
-Pinning the invocation, not just the version string, is what makes the record
-trustworthy. A version captured once into `$VERSION` while later commands say
-plain `claude` records a lookup, not a control: a `PATH` change or an update
-landing mid-procedure would test one binary and log another, and the entry would
-look complete either way. `"${CLAUDE[@]}"` is the thing that actually decides
-which binary runs, which is why the log records the invocation alongside the
-version.
+`run_probe` exists so the capture rule is written once and obeyed everywhere. A
+pipeline takes its status from its last stage, so any `cmd | grep …` or
+`cmd | awk …` reports the filter's success rather than the command's — the
+version lookup and probe 2 would both silently log a pass over a failure. And
+because these probes are *expected* to exit non-zero, a bare
+`out="$(…)"; status=$?` aborts under `set -e` before the status is recorded,
+losing exactly the run most worth having.
 
 #### Probe 1 — does `--` still fail to end option parsing?
 
 ```bash
-"${CLAUDE[@]}" --plugin-dir "$PWD/dev/plugins/mattpocock-skills" -- --bg
+run_probe "$PROBE_BIN" --plugin-dir "$PWD/dev/plugins/mattpocock-skills" -- --bg
+printf '%s\n' "$probe_out"
+printf 'probe1_exit=%s\n' "$probe_status"
 ```
 
 Expect a background session to start (`backgrounded · <id>`), which is what
 makes continuing to scan past the marker correct.
 
 This probe **starts a real background session.** Stop it, then confirm it is
-actually gone — through the **same** CLI that started it:
+gone — through the same binary that started it:
 
 ```bash
-"${CLAUDE[@]}" stop <id>        # the id from the "backgrounded · <id>" line
-"${CLAUDE[@]}" agents --json    # expect: no session with that id
+"$PROBE_BIN" stop <id>        # the id from the "backgrounded · <id>" line
+"$PROBE_BIN" agents --json    # expect: no session with that id
 ```
 
-Do not stop a candidate's session with the installed `claude`, or the reverse.
-Session management is a contract between a CLI and the sessions it created, and
-this procedure has no evidence that the contract is stable across versions —
-which is the whole premise of the section. Mixing them risks a stop that appears
-to succeed while the session survives, and the cleanup check would not catch it,
-because it too would be asking the wrong CLI.
-
 `claude stop` is absent from `claude --help`'s command list but is real — see
-"`claude --help` is not the authoritative flag surface" below, which is the
-same trap in a different place. Prefer it to `kill <pid>`: killing the process
-leaves the session record behind, so the confirmation step can no longer tell a
-stopped session apart from one that was never cleaned up.
+"`claude --help` is not the authoritative flag surface" below, the same trap in
+a different place. Prefer it to `kill <pid>`: killing the process leaves the
+session record behind, so the confirmation step can no longer tell a stopped
+session apart from one that was never cleaned up.
+
+Use one binary for start, stop, and read-back. Session management is a contract
+between a CLI and the sessions it created, and this section exists precisely
+because cross-version CLI behaviour is not assumed stable; mixing them risks a
+stop that appears to succeed while the session survives, and the confirmation
+would not catch it, because it too would be asking the wrong CLI.
 
 #### Probe 2 — do clustered short flags still engage `--print`?
 
 ```bash
-if out="$("${CLAUDE[@]}" -pd "say ok" < /dev/null 2>&1)"; then status=0; else status=$?; fi
-printf '%s\n' "$out" | grep -v '^Permission deny rule' || true
-printf 'exit=%s\n' "$status"
+run_probe "$PROBE_BIN" -pd "say ok"
+printf '%s\n' "$probe_out" | grep -v '^Permission deny rule' || true
+printf 'probe2_exit=%s\n' "$probe_status"
 ```
-
-`< /dev/null` is what makes this deterministic when the probe is run from a
-script rather than typed. Without it and with stdin not a terminal, the CLI
-waits three seconds for input it will never receive and emits a `no stdin data
-received` warning before the error the probe is actually looking for.
-
-The `if`/`else` is not decoration: this probe is *expected* to exit non-zero, so
-under `set -e` a bare `out="$(...)"; status=$?` would abort the shell before the
-status could be recorded — the one run you most need to log is the one that
-would not be logged. An `if` condition suppresses `errexit`, and the `|| true`
-keeps the display filter non-fatal for the same reason, since `grep` exits 1
-when it filters everything away.
 
 Expect `Error: Input must be provided either through stdin or as a prompt
-argument when using --print`, and `exit=1`. No session starts, so there is
-nothing to clean up.
+argument when using --print`, and `probe2_exit=1`. No session starts, so there
+is nothing to clean up.
 
-Capture the output and status **before** filtering. In a repository whose
+The `grep` is display only, and `|| true` keeps it non-fatal because `grep`
+exits 1 when it filters everything away. In a repository whose
 `.claude/settings.json` carries `Write(...)` deny rules, this probe prints a
 "not matched by file permission checks" warning per rule ahead of its own
-output, and filtering them out is what makes the result readable. But the
-obvious form —
+output; filtering them is what makes the result readable. Filtering never
+touches `probe_status`, which `run_probe` captured before any pipe existed.
 
-```bash
-"${CLAUDE[@]}" -pd "say ok" 2>&1 | grep -v '^Permission deny rule'   # WRONG
-```
+#### Run log
 
-— reports `grep`'s status, not Claude's. Measured here: Claude exits 1 while
-that pipeline reports 0, so the exit code silently inverts from "the probe
-failed as expected" to "everything was fine". `set -o pipefail` or
-`${PIPESTATUS[0]}` also work; capture-then-filter is used above because it keeps
-the status and the filtered output independent of shell options that a reader
-may not have set.
+Append an entry on every run, including runs where nothing changed, and
+including the **exact commands as executed**. Outcomes without commands cannot
+be reproduced or audited: a reader cannot tell which binary was probed, and
+"confirmed" becomes a claim rather than a record. For probe 1 the session id,
+the stop, and the post-stop absence check are part of the outcome, because an
+uncleaned session is a failed run even if the parser behaved as expected.
 
-#### Record every run
-
-Append an entry below on every run, including runs where nothing changed, and
-including the **exact commands as executed** — expanded, not templated. A log of
-outcomes without commands cannot be reproduced or audited: a reader cannot tell
-which binary was probed, and "confirmed" becomes a claim rather than a record.
-For probe 1, the session id, the stop, and the post-stop absence check are part
-of the outcome, because an uncleaned session is a failed run even if the parser
-behaved as expected.
+The log lives here, in the canonical compatibility section, rather than in a
+file of its own. That means this document is edited both when the wrapper's
+design changes and on every compatibility run — two unrelated reasons, which is
+normally worth splitting. It is not split because the procedure requires the
+record to sit in this section, and a log holds records rather than instructions,
+so there is nothing here that could drift out of step with the procedure above.
 
 **2026-08-08 — 2.1.226 — both confirmed**
 
-Recorded by PR #3, which established the probes. The entry predates this logging
+Recorded by PR #3, which established the probes. It predates this logging
 format, so the exact commands were not preserved; both behaviours were reported
-confirmed against 2.1.226. Treated as the baseline, not as a reproducible record
-— the first entry to meet the format in full is the one below.
+confirmed against 2.1.226. It is a reference entry, not a reproducible record —
+the first entry meeting the format in full is the one below.
 
 **2026-08-10 — 2.1.226 — probe 2 confirmed, probe 1 not re-run**
 
 Not triggered by a version change. Ran while establishing this procedure, to
-check the recorded outcomes still held. Route (a), the installed binary.
+check the recorded outcomes still held. The harness above was saved to a script
+and run verbatim, with probe 1's block omitted:
 
 ```
-$ CLAUDE_BIN="$(type -P claude)"; CLAUDE=("$CLAUDE_BIN")
-$ if raw="$("${CLAUDE[@]}" --version 2>&1)"; then status=0; else status=$?; fi
-$ VERSION="${raw%% *}"
-$ printf 'cli=%s version=%s\n' "${CLAUDE[*]}" "$VERSION"
-cli=/opt/node22/bin/claude version=2.1.226
-
-$ if out="$("${CLAUDE[@]}" -pd "say ok" < /dev/null 2>&1)"; then status=0; else status=$?; fi
-$ printf '%s\n' "$out" | grep -v '^Permission deny rule' || true
+$ bash probe.sh
+binary=/opt/node22/bin/claude version=2.1.226
 Error: Input must be provided either through stdin or as a prompt argument when using --print
-$ printf 'exit=%s\n' "$status"
-exit=1
+probe2_exit=1
+$ echo $?
+0
 ```
 
 Probe 1 was deliberately not re-run: it starts a real background session, and
 there was no version change to justify one. The log says "not re-run" rather
-than silently carrying the earlier result forward. No session was started, so
-there was no cleanup to perform or record.
+than carrying the 2026-08-08 result forward as though it had been re-observed.
+No session was started, so there was no cleanup to perform or record.
 
-Also confirmed in the same run, since the cleanup step above depends on it:
+Two consequences of that omission, stated rather than glossed: probe 1's
+`run_probe` form and its `</dev/null` redirect have not themselves been
+exercised, and the next operator to run this under a real trigger is the first
+to do so. Also confirmed in the same run, since the cleanup step depends on it:
 `claude stop <id>` exists at 2.1.226 (`Usage: claude stop <id>`), despite being
 absent from `claude --help`'s command list.
 
