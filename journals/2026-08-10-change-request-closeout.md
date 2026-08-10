@@ -50,8 +50,15 @@ $ python -m unittest discover -s tests                         # 78 tests, OK
 $ python scripts/validate_cloud_environment_acceptance.py      # FAILS,  exit 1
 ```
 
-`loop/validate_session.sh` runs the first two, not the third. The digest check
-runs in `.github/workflows/cloud-environment-acceptance.yml`, which triggers on
+`loop/validate_session.sh` runs the repository validator (`:143`) and the test
+suite (`:151`), not the acceptance validator. The middle line above is the
+runner used *here* — `:151` actually invokes `python -m pytest tests -q`, and
+`pytest` is not installed in this cloud environment. Same test files, so the
+conclusion stands, but the commands are not interchangeable and the
+distinction matters to anyone re-running this.
+
+The digest check runs in
+`.github/workflows/cloud-environment-acceptance.yml`, which triggers on
 `pull_request` — and under ADR-0009 the loop pushes directly to `main` and
 opens no pull request. An autonomous session could therefore edit the script
 that provisions the developer environment, pass its own validation, and land
@@ -61,6 +68,35 @@ Nothing was changed about this: `validate_session.sh` is protected, and adding
 a check to it is exactly the kind of change that goes through a request rather
 than a session. It is written up in the Part B section of
 `2026-08-08-dev-only-skills.md`, where the decision it bears on lives.
+
+## The review found a hole in what had just been applied
+
+A two-axis code review was run over the applied change. The Spec axis
+confirmed the patch had been applied verbatim and that all three review
+rounds' fixes were really present. The Standards axis found that the patch
+itself has a defect nobody caught in three rounds:
+
+`EMPTY_RETENTION_DAYS` and `WORK_RETENTION_DAYS` reach `[[ ]]` arithmetic
+unvalidated, and that context fails **open**. With `WORK_RETENTION_DAYS="7d"`
+the policy warning stays silent, the retain-forever guard is skipped, and the
+age guard is skipped — so a work-bearing branch reaches the delete path at any
+age and the run exits 0. Confirmed against the synthetic remote: the branch
+flips from `KEEP … retains rejected work indefinitely` to `WOULD … past 7dd`.
+
+The two axes disagreed usefully. Applying the patch verbatim was both faithful
+*and* the thing that propagated the defect — which is an argument for reviewing
+what a change request contains, not only whether it was applied as written.
+
+Fixed at the operator's direction, with the attached patch regenerated so the
+document and the code agree again. Leading zeros are rejected as well as
+non-numerics: `[[ ]]` reads them as octal, so `08` fails open like `7d`, and
+`010` silently means 8. This is recorded as review round 4 in the request.
+
+Worth naming as a pattern, because it is now three for three: rounds 2, 3, and
+4 were all the same failure class — a failure that presents as an uneventful
+success. Rounds 2 and 3 hardened the output paths. Nobody had looked at the
+input path, and the synthetic-remote exercise that "verified" this script
+varies only the remote, never the configuration.
 
 ## What is still open
 
@@ -76,6 +112,15 @@ than a session. It is written up in the Part B section of
 - **Decision 4 of the retention request** — the retention rule exists in code
   and in its request document, but a reader arriving at ADR-0008's exit
   criterion 2 will not find it. One paragraph, not written.
+- **The journal-name contract is stated two ways.** `loop/prune_branches.sh`
+  requires `journals/<id>.md` exactly before it will delete a work-bearing
+  branch; `loop/validate_session.sh:167` accepts any added file whose name
+  merely *contains* the session id. `journals/` already holds both shapes —
+  `2026-08-09-0525.md` and `2026-08-09-deny-rule-scoping.md`, and this file is
+  the second shape. A journal named `<id>-topic.md` passes validation but is
+  invisible to the pruner's guard. It fails safe, so nothing is at risk today;
+  reconciling it means editing `validate_session.sh`, which is protected and
+  therefore its own request.
 
 ## Verification
 
@@ -84,6 +129,14 @@ than a session. It is written up in the Part B section of
 `bash -n loop/prune_branches.sh` — clean; the workflow parses with
 `workflow_dispatch` as its only trigger, which is the round-1 finding-4 trap
 staying shut.
+
+Round 4's guard, exercised on both sides: `7d`, `abc`, `-1`, `08`, `09`,
+`007`, `010`, `" 7"`, `"7 "`, `1e3`, and a command-substitution payload all
+exit 1 before any branch is evaluated; `0`, `7`, `90`, `365` all run normally.
+The injection case is not hypothetical — `[[ ]]` evaluates array subscripts.
+
+The regenerated patch was checked by applying it to a clean `origin/main`
+worktree: it reproduces both files byte-for-byte at mode 755.
 
 Note for whoever runs the loop next: `validate_session.sh:151` invokes
 `python -m pytest tests`, and `pytest` is not installed in this cloud

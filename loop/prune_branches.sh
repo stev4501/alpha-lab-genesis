@@ -35,6 +35,30 @@ WORK_RETENTION_DAYS="${WORK_RETENTION_DAYS:-0}"   # 0 = retain work-bearing fore
 
 cd "${REPO_DIR:-$(git rev-parse --show-toplevel)}"
 
+# Both windows come from workflow env and are then used in `[[ ]]` arithmetic.
+# That context fails OPEN on a value it cannot parse: `[[ "7d" -gt 0 ]]` does
+# not abort under `set -e`, it prints an error and evaluates false. With
+# WORK_RETENTION_DAYS="7d" the policy warning below stays silent, the
+# retain-forever guard is skipped, and the age guard is skipped — so a typo in
+# a protected workflow file silently inverts "never delete rejected work" into
+# "delete it at any age", which is the opposite of README.md's source-of-truth
+# rule and the same silent-success class as the round 2 and round 3 findings.
+# Validate before anything is judged, and fail closed and loudly.
+#
+# Leading zeros are rejected rather than tolerated, because `[[ ]]` reads them
+# as octal and that fails in BOTH directions: "08" and "09" are invalid octal
+# and fail open exactly like "7d", while "010" parses fine and silently means
+# 8. A retention window that quietly means something other than what is written
+# in the workflow is worse than one that refuses to start.
+for _var in EMPTY_RETENTION_DAYS WORK_RETENTION_DAYS; do
+  if [[ ! "${!_var}" =~ ^(0|[1-9][0-9]*)$ ]]; then
+    echo "FATAL: ${_var}=${!_var} is not a non-negative integer without leading zeros;" >&2
+    echo "       nothing was evaluated." >&2
+    exit 1
+  fi
+done
+unset _var
+
 # Raising this is a policy act, not a tuning knob, so it says so out loud in
 # the run log rather than only in a comment nobody reads at 04:17 on a Sunday.
 if [[ "$WORK_RETENTION_DAYS" -gt 0 ]]; then
