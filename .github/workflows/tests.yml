@@ -19,6 +19,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          # fetch-depth: 0 is required. tests/test_golden_replay_e0002.py pins
+          # the replay to historical commits and reads them with `git show`;
+          # on the default shallow clone its setUpClass errors out and the
+          # whole replay class is skipped silently -- 67 tests instead of 78.
+          # session.yml sets this for the same reason.
+          fetch-depth: 0
 
       - uses: actions/setup-python@v5
         with:
