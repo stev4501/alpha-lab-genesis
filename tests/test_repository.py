@@ -352,16 +352,43 @@ class RepositoryContractTests(unittest.TestCase):
             )
 
     def test_historical_generation_remains_valid_after_generation_bump(self):
+        # Assert the ordering this test is named for, deriving both sides.
+        # Naming either generation as a literal is what broke this test: the
+        # one that exists to prove a generation bump is safe was itself failed
+        # by one.
         records = validator.load_ledger(ROOT / "EXPERIMENTS.jsonl", [])
-        self.assertTrue(
-            any(
-                record["design"]["system_generation"] == "G-0001"
-                for record in records
-            )
+        recorded = {
+            record["design"]["system_generation"] for record in records
+        }
+        ledger_numbers = {
+            number
+            for number in (validator.generation_number(value) for value in recorded)
+            if number is not None
+        }
+        self.assertEqual(
+            len(ledger_numbers),
+            len(recorded),
+            f"EXPERIMENTS.jsonl carries a malformed system_generation: {recorded}",
         )
-        self.assertEqual("G-0003", json.loads(
+        self.assertTrue(ledger_numbers, "EXPERIMENTS.jsonl records no generation.")
+
+        current = json.loads(
             (ROOT / "CORE_MANIFEST.json").read_text(encoding="utf-8")
-        )["system_generation"])
+        )["system_generation"]
+        current_number = validator.generation_number(current)
+        self.assertIsNotNone(
+            current_number,
+            f"CORE_MANIFEST.json system_generation {current!r} is malformed",
+        )
+
+        # The ledger is append-only (ADR-0001), so the oldest generation in it
+        # only ever recedes further behind the manifest.
+        self.assertLess(
+            min(ledger_numbers),
+            current_number,
+            f"The manifest ({current}) has not moved past the oldest generation "
+            "in the ledger, so this test is not exercising a generation bump.",
+        )
         self.assertEqual([], validator.validate(ROOT))
 
     def test_evaluation_start_is_first_executable_session(self):
