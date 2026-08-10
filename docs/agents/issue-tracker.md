@@ -57,9 +57,15 @@ Known gaps:
 | Operation | Why REST | MCP equivalent |
 | :--- | :--- | :--- |
 | Create or update a label | `/triage` applies labels, which fails if the label does not exist | `get_label` reads; there is no create or update tool |
+| Add an issue dependency (`blocked_by`) | `/wayfinder` records blocking edges between tickets | `sub_issue_write` covers parent/child hierarchy only, which is a different relation; there is no dependency tool, and no MCP read either |
 
 The label recipe itself lives in `triage-labels.md`, next to the label
 definitions it depends on.
+
+Issue dependencies are the one gap where the read-back condition cannot be
+satisfied as written, because MCP has no dependency read either. Verify with a
+REST `GET` on the same endpoint instead, and say so wherever the write is
+reported.
 
 ## Conventions
 
@@ -122,9 +128,22 @@ tickets.
   `gh api --method POST repos/<owner>/<repo>/issues/<child>/dependencies/blocked_by -F issue_id=<blocker-db-id>`,
   where `<blocker-db-id>` is the blocker's numeric **database id**
   (`gh api repos/<owner>/<repo>/issues/<n> --jq .id`, _not_ the `#number` or
-  `node_id`). Where dependencies aren't available, fall back to a
-  `Blocked by: #<n>, #<n>` line at the top of the child body. A ticket is
-  unblocked when every blocker is closed.
+  `node_id`). In a cloud session this is the REST fallback above, not a reason
+  to skip the edge:
+
+  ```bash
+  curl -sS -X POST -H "Authorization: Bearer ${GH_TOKEN}" \
+    -H "Accept: application/vnd.github+json" \
+    "https://api.github.com/repos/<owner>/<repo>/issues/<child>/dependencies/blocked_by" \
+    -d '{"issue_id":<blocker-db-id>}'
+  ```
+
+  Fall back to a `Blocked by: #<n>, #<n>` line at the top of the child body
+  only where dependencies are genuinely unavailable — meaning the API rejects
+  the call for this repository, not merely that `gh` is missing from the
+  session. Confirm which by reading the endpoint before assuming; on
+  `stev4501/alpha-lab-genesis` it answers. A ticket is unblocked when every
+  blocker is closed.
 - **Frontier query**: list the map's open children, drop any with an open
   blocker or an assignee; first in map order wins.
 - **Claim**: `gh issue edit <n> --add-assignee @me` — the session's first write.
