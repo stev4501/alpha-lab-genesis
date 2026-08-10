@@ -295,19 +295,51 @@ command in this procedure — probes, cleanup, and read-back alike:
 
 ```bash
 # (a) the version already in use -- the ordinary case after an upgrade
-CLAUDE=("$(command -v claude)")
+CLAUDE_BIN="$(type -P claude)" || { echo "claude not on PATH" >&2; exit 1; }
+case "$CLAUDE_BIN" in /*) ;; *) echo "not absolute: $CLAUDE_BIN" >&2; exit 1 ;; esac
+[ -x "$CLAUDE_BIN" ] || { echo "not executable: $CLAUDE_BIN" >&2; exit 1; }
+CLAUDE=("$CLAUDE_BIN")
 
 # (b) or a candidate, before adopting it
 CANDIDATE=2.1.230                                    # the version being evaluated
-CLAUDE=(npx -y @anthropic-ai/claude-code@"$CANDIDATE")
+NPX_BIN="$(type -P npx)" || { echo "npx not on PATH" >&2; exit 1; }
+CLAUDE=("$NPX_BIN" -y @anthropic-ai/claude-code@"$CANDIDATE")
 ```
+
+Use `type -P`, not `command -v`. `command -v` reports whatever the *shell* would
+run, which in an interactive session may be an alias or a function — and an
+alias description is not a path you can execute:
+
+```bash
+$ alias claude="echo nope"
+$ command -v claude
+alias claude='echo nope'
+$ type -P claude
+/opt/node22/bin/claude
+```
+
+`type -P` searches `PATH` only, so it skips aliases and functions. The two
+checks after it reject a relative `PATH` entry and a non-executable result, so
+what lands in `CLAUDE` is an absolute path to a real binary or the procedure
+stops. The `npx` launcher for route (b) is resolved the same way, so the
+candidate route pins its launcher too rather than re-resolving it per command.
 
 Then read the version **from that exact CLI**, and record both halves:
 
 ```bash
-VERSION="$("${CLAUDE[@]}" --version | awk '{print $1}')"
+if raw="$("${CLAUDE[@]}" --version 2>&1)"; then status=0; else status=$?; fi
+[ "$status" -eq 0 ] || { printf 'version lookup failed (exit %s): %s\n' "$status" "$raw" >&2; exit 1; }
+VERSION="${raw%% *}"
+case "$VERSION" in [0-9]*.[0-9]*.[0-9]*) ;; *) echo "unexpected version: $raw" >&2; exit 1 ;; esac
 printf 'cli=%s version=%s\n' "${CLAUDE[*]}" "$VERSION"
 ```
+
+Validate before parsing rather than piping into `awk`. A pipeline takes its
+status from the last stage, so `--version | awk '{print $1}'` succeeds even when
+the CLI itself failed, and an empty or partial `VERSION` gets logged as though
+the lookup worked. That is the same status-masking trap probe 2 documents below
+— it is worth stating twice because it reappears anywhere a command's output is
+parsed inline.
 
 Pinning the invocation, not just the version string, is what makes the record
 trustworthy. A version captured once into `$VERSION` while later commands say
@@ -316,9 +348,6 @@ landing mid-procedure would test one binary and log another, and the entry would
 look complete either way. `"${CLAUDE[@]}"` is the thing that actually decides
 which binary runs, which is why the log records the invocation alongside the
 version.
-
-Route (a) resolves to an absolute path deliberately — `command -v` is evaluated
-once, so a later `PATH` change cannot redirect the probes mid-run.
 
 #### Probe 1 — does `--` still fail to end option parsing?
 
@@ -353,10 +382,22 @@ stopped session apart from one that was never cleaned up.
 #### Probe 2 — do clustered short flags still engage `--print`?
 
 ```bash
-out="$("${CLAUDE[@]}" -pd "say ok" 2>&1)"; status=$?
-printf '%s\n' "$out" | grep -v '^Permission deny rule'
+if out="$("${CLAUDE[@]}" -pd "say ok" < /dev/null 2>&1)"; then status=0; else status=$?; fi
+printf '%s\n' "$out" | grep -v '^Permission deny rule' || true
 printf 'exit=%s\n' "$status"
 ```
+
+`< /dev/null` is what makes this deterministic when the probe is run from a
+script rather than typed. Without it and with stdin not a terminal, the CLI
+waits three seconds for input it will never receive and emits a `no stdin data
+received` warning before the error the probe is actually looking for.
+
+The `if`/`else` is not decoration: this probe is *expected* to exit non-zero, so
+under `set -e` a bare `out="$(...)"; status=$?` would abort the shell before the
+status could be recorded — the one run you most need to log is the one that
+would not be logged. An `if` condition suppresses `errexit`, and the `|| true`
+keeps the display filter non-fatal for the same reason, since `grep` exits 1
+when it filters everything away.
 
 Expect `Error: Input must be provided either through stdin or as a prompt
 argument when using --print`, and `exit=1`. No session starts, so there is
@@ -402,13 +443,14 @@ Not triggered by a version change. Ran while establishing this procedure, to
 check the recorded outcomes still held. Route (a), the installed binary.
 
 ```
-$ CLAUDE=("$(command -v claude)")
-$ VERSION="$("${CLAUDE[@]}" --version | awk '{print $1}')"
+$ CLAUDE_BIN="$(type -P claude)"; CLAUDE=("$CLAUDE_BIN")
+$ if raw="$("${CLAUDE[@]}" --version 2>&1)"; then status=0; else status=$?; fi
+$ VERSION="${raw%% *}"
 $ printf 'cli=%s version=%s\n' "${CLAUDE[*]}" "$VERSION"
 cli=/opt/node22/bin/claude version=2.1.226
 
-$ out="$("${CLAUDE[@]}" -pd "say ok" 2>&1)"; status=$?
-$ printf '%s\n' "$out" | grep -v '^Permission deny rule'
+$ if out="$("${CLAUDE[@]}" -pd "say ok" < /dev/null 2>&1)"; then status=0; else status=$?; fi
+$ printf '%s\n' "$out" | grep -v '^Permission deny rule' || true
 Error: Input must be provided either through stdin or as a prompt argument when using --print
 $ printf 'exit=%s\n' "$status"
 exit=1
