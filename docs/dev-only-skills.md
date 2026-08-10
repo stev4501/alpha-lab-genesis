@@ -288,10 +288,36 @@ downgrade, or a pinned version moving underneath you. This section carries its
 own trigger and the full procedure; nothing elsewhere needs to point at it for
 it to be run.
 
+#### Step 0 — bind the version before probing anything
+
+Read the operational version and hold it in a variable, then use that variable
+in every probe below. Do not type a version literal and do not use `@latest`:
+
+```bash
+VERSION="$(claude --version | awk '{print $1}')"   # e.g. 2.1.226
+echo "$VERSION"                                    # record this exact value
+```
+
+This is the step that keeps the log honest. `<version>` written by hand can name
+one version while the binary under test is another, and the record would look
+complete either way. Binding it once means the version you log and the version
+you probed cannot diverge.
+
+Two forms, and the difference matters:
+
+- **Probing the version already in use** — the ordinary case after an upgrade.
+  Probe the installed binary directly (`claude ...`), because the operational
+  binary is the thing whose behaviour the wrapper depends on.
+- **Probing a version before adopting it** — use the `npx` form below with
+  `@"$VERSION"` set to the candidate, and say so in the log entry.
+
 #### Probe 1 — does `--` still fail to end option parsing?
 
 ```bash
-npx -y @anthropic-ai/claude-code@<version> \
+# installed binary:
+claude --plugin-dir "$PWD/dev/plugins/mattpocock-skills" -- --bg
+# or, for a candidate version:
+npx -y @anthropic-ai/claude-code@"$VERSION" \
   --plugin-dir "$PWD/dev/plugins/mattpocock-skills" -- --bg
 ```
 
@@ -315,28 +341,58 @@ stopped session apart from one that was never cleaned up.
 #### Probe 2 — do clustered short flags still engage `--print`?
 
 ```bash
-npx -y @anthropic-ai/claude-code@<version> -pd "say ok"
+claude -pd "say ok"                                # installed binary
+npx -y @anthropic-ai/claude-code@"$VERSION" -pd "say ok"   # or a candidate
 ```
 
 Expect `Error: Input must be provided either through stdin or as a prompt
 argument when using --print`. No session starts, so there is nothing to clean
 up.
 
+In a repository whose `.claude/settings.json` carries `Write(...)` deny rules,
+this prints a "not matched by file permission checks" warning per rule first.
+That is unrelated noise — filter with `grep -v '^Permission deny rule'` to see
+the probe's own output.
+
 #### Record every run
 
-Add a row below on every run, including runs where nothing changed. A procedure
-with no log cannot answer "when was this last true?", which is the only question
-an upgrade actually asks.
+Append an entry below on every run, including runs where nothing changed, and
+including the **exact commands as executed** — expanded, not templated. A log of
+outcomes without commands cannot be reproduced or audited: a reader cannot tell
+which binary was probed, and "confirmed" becomes a claim rather than a record.
+For probe 1, the session id, the stop, and the post-stop absence check are part
+of the outcome, because an uncleaned session is a failed run even if the parser
+behaved as expected.
 
-| Date | Version | Probe 1 (`--` not honoured) | Probe 2 (clusters engage `--print`) |
-| :--- | :--- | :--- | :--- |
-| 2026-08-08 | 2.1.226 | confirmed | confirmed |
-| 2026-08-10 | 2.1.226 | not re-run | confirmed |
+**2026-08-08 — 2.1.226 — both confirmed**
 
-The 2026-08-10 row was not triggered by a version change — it re-ran the
-non-destructive probe only, while establishing this procedure. Probe 1 was left
-alone rather than starting a background session for no reason, which is why the
-log records "not re-run" instead of silently reusing the earlier result.
+Recorded by PR #3, which established the probes. The entry predates this logging
+format, so the exact commands were not preserved; both behaviours were reported
+confirmed against 2.1.226. Treated as the baseline, not as a reproducible record
+— the first entry to meet the format in full is the one below.
+
+**2026-08-10 — 2.1.226 — probe 2 confirmed, probe 1 not re-run**
+
+Not triggered by a version change. Ran while establishing this procedure, to
+check the recorded outcomes still held.
+
+```
+$ claude --version
+2.1.226 (Claude Code)
+
+$ claude -pd "say ok" 2>&1 | grep -v '^Permission deny rule'
+Error: Input must be provided either through stdin or as a prompt argument when using --print
+(exit 1)
+```
+
+Probe 1 was deliberately not re-run: it starts a real background session, and
+there was no version change to justify one. The log says "not re-run" rather
+than silently carrying the earlier result forward. No session was started, so
+there was no cleanup to perform or record.
+
+Also confirmed in the same run, since the cleanup step above depends on it:
+`claude stop <id>` exists at 2.1.226 (`Usage: claude stop <id>`), despite being
+absent from `claude --help`'s command list.
 
 #### If either outcome changes
 
