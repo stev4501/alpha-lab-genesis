@@ -2,7 +2,15 @@
 
 - Origin: explicit operator request after two fresh sessions disproved PR #17's
   repository-declaration approach.
-- Status: **cloud acceptance verified; ready for supervised merge review**.
+- Status: **APPLIED** — landed on `main` 2026-08-09 via PR #27
+  (`4b1551a`, "make Alpha Lab Dev the sole skills route"). All three files in
+  the record patch are present on `main`, the acceptance receipt at
+  `.claude/cloud-environment-plugin-acceptance.json` reads `verified`, and
+  `scripts/validate_cloud_environment_acceptance.py` exits zero. The header
+  said "ready for supervised merge review" until 2026-08-10; that was stale,
+  not a pending review. The same PR also removed `bin/dev-session` — the
+  cloud environment is now the only route to the developer skills, which is
+  what "sole skills route" means and why `bin/` no longer exists.
 - Protected paths: `.claude/`, `.github/`, and `scripts/`.
 - Record patch:
   `core_change_requests/patches/2026-08-09-cloud-environment-dev-skills-protected-paths.diff`.

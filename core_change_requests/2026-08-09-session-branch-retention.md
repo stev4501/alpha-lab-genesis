@@ -3,7 +3,9 @@
 - Origin: supervised session, 2026-08-09, after the operator ran `session.yml`
   by `workflow_dispatch` and observed that the branch was still on the remote
   when the session ended
-- Status: **proposed** — nothing applied. Patch attached and verified.
+- Status: **APPLIED 2026-08-10** in a supervised session, at the operator's
+  direction, with all five decisions in "For the human to decide" taken at the
+  shipped defaults. Patch applied verbatim; see "Decided 2026-08-10" below.
   Revised 2026-08-09 after review rounds 1-3 on PR #13; see those sections.
 - Requires sealed changes: no
 - Requires protected-path changes: yes (`loop/`, `.github/`) — human applies
@@ -380,6 +382,55 @@ flips the next session into maintenance mode.
 5. **`failed/2026-08-09-0505` specifically.** It is independent of all of the
    above. It holds nothing, `HANDOFF.md` says so, and deleting it by hand today
    costs nothing and waits on no approval.
+
+## Decided 2026-08-10 (supervised session)
+
+The operator directed that this request be applied. All five questions above
+were taken at the shipped defaults, which is the posture the patch already
+encoded — so the applied diff is the attached patch verbatim, with no edits:
+
+1. **Rejected work is never deleted.** `WORK_RETENTION_DAYS` stays 0.
+   `README.md`'s source-of-truth rule is not amended, and nothing in this
+   change asks it to be. The positive-value path ships dormant and warns in
+   the run log if it is ever armed.
+2. **Empty window: 7 days**, as proposed.
+3. **Schedule stays commented out.** Manual dispatch only, following
+   `session.yml`'s precedent.
+4. **Policy recorded here**, in this document, for now. The ADR-0008
+   amendment or ADR-0010 the request suggests was *not* written — see the
+   note below.
+5. **`failed/2026-08-09-0505` was not hand-deleted.** Confirmed empty
+   (`git rev-list --count origin/main..d162587` is 0), but it is one day old
+   and therefore inside the 7-day window. Left to age out through the
+   mechanism this request adds, rather than deleted by hand outside it — the
+   pruner's first real run is a better proof of the rule than a manual
+   deletion that bypasses it.
+
+Still open after this: decision 4's *placement*. The retention rule now
+exists in code and in this document, but a reader arriving at ADR-0008's exit
+criterion 2 will not find it. That is a one-paragraph amendment and a
+governance call the operator has not yet made.
+
+### Independent verification before applying
+
+The synthetic-remote exercise described under "Verification" was reproduced
+from scratch in the applying session rather than taken on trust — one branch
+of each shape against a real bare remote, with the races injected through a
+`git` shim and a `pre-receive` hook:
+
+- default posture deletes only the empty branch; `main` and `unmerged/*`
+  untouched;
+- `WORK_RETENTION_DAYS=90` arms the work-bearing path, and the journal guard
+  still keeps the branch whose journal is absent from `main`;
+- work landing between enumeration and deletion loses the lease, survives,
+  and the run exits 0;
+- a failed enumeration is fatal rather than a tidy `0 deleted, 0 kept`;
+- a `pre-receive` hook that rejects the deletion **while printing the phrase
+  `stale info`** is correctly reported as an error and exits 1 — the round-3
+  finding, confirmed against the behaviour that would have laundered it.
+
+`python scripts/validate_repository.py` is valid and
+`python -m unittest discover -s tests` is 78 tests, OK.
 
 ## How to apply
 
