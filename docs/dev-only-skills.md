@@ -305,6 +305,13 @@ scripts, not left as prose. Probe 1 starts a real background session, so cleanup
 is installed as an `EXIT` trap *before* the session can exist, and the script
 does not report success until the session is confirmed gone.
 
+"Fail-closed" is claimed narrowly. The trap covers normal exits and errors,
+including `set -e` aborts and Ctrl-C; it cannot run after a `SIGKILL`, a
+crashed shell, or a dead machine, and a session started just before one of
+those is leaked. The read-back is written so that *not knowing* is also a
+failure: if `agents --json` cannot be read, the script says so and exits
+non-zero rather than treating an unreadable answer as absence.
+
 ```bash
 #!/usr/bin/env bash
 # Re-verify the two CLI behaviours bin/dev-session depends on.
@@ -355,19 +362,36 @@ esac
 echo "probe2=confirmed"
 
 # --- probe 1: does `--` still fail to end option parsing? -----------------
-# Trap first: from here on, any exit path stops and verifies the session.
+# Trap first: from here on, every normal exit and error path stops and verifies
+# the session. A SIGKILL or a crashed shell runs no trap and can still leak one.
 SESSION_ID=""
 cleanup() {
-  local rc=$?
+  local rc=$? stop_status agents_status
   # If we died between starting the session and recording its id, recover the
   # id from the probe output rather than leaking a live background session.
   [ -n "$SESSION_ID" ] || SESSION_ID="$(session_id_from "${probe_out:-}")"
   [ -n "$SESSION_ID" ] || exit "$rc"
-  "$PROBE_BIN" stop "$SESSION_ID" >/dev/null 2>&1 || true
-  if "$PROBE_BIN" agents --json </dev/null 2>/dev/null | grep -qF -- "$SESSION_ID"; then
-    printf 'CLEANUP FAILED: session %s still present\n' "$SESSION_ID" >&2
+
+  # Stop is best-effort -- the session may already have ended -- but its status
+  # is reported, never silently dropped. Absence is the authority.
+  if stop_out="$("$PROBE_BIN" stop "$SESSION_ID" </dev/null 2>&1)"; then stop_status=0; else stop_status=$?; fi
+
+  # Read back separately, and refuse to conclude anything if the read failed.
+  # No pipe: `agents --json | grep -q` would let a failed read look like
+  # absence, and under pipefail a *matched* id makes grep exit early, the
+  # producer take SIGPIPE, and the pipeline report failure -- inverting the
+  # check precisely when the session is still there.
+  if agents_out="$("$PROBE_BIN" agents --json </dev/null 2>&1)"; then agents_status=0; else agents_status=$?; fi
+  if [ "$agents_status" -ne 0 ]; then
+    printf 'CLEANUP UNVERIFIED: agents --json failed (exit %s): %s\n' "$agents_status" "$agents_out" >&2
+    printf '  session %s may still be running; stop exited %s\n' "$SESSION_ID" "$stop_status" >&2
     exit 1
   fi
+  case "$agents_out" in
+    *"$SESSION_ID"*)
+      printf 'CLEANUP FAILED: session %s still present (stop exited %s)\n' "$SESSION_ID" "$stop_status" >&2
+      exit 1 ;;
+  esac
   printf 'cleanup=verified (%s absent)\n' "$SESSION_ID"
   exit "$rc"
 }
@@ -375,6 +399,8 @@ trap cleanup EXIT
 
 run_probe "$PROBE_BIN" --plugin-dir "$PWD/dev/plugins/mattpocock-skills" -- --bg
 printf '%s\n' "$probe_out" | grep -v '^Permission deny rule' || true
+[ "$probe_status" -eq 0 ] \
+  || { printf 'PROBE 1 CHANGED: expected exit 0, got %s\n' "$probe_status" >&2; exit 1; }
 SESSION_ID="$(session_id_from "$probe_out")"
 [ -n "$SESSION_ID" ] \
   || { echo "PROBE 1 CHANGED: no background session started -- the CLI may now honour \`--\`" >&2; exit 1; }
@@ -468,13 +494,13 @@ binary=/opt/node22/bin/claude version=2.1.226
 Error: Input must be provided either through stdin or as a prompt argument when using --print
 probe2=confirmed
 Starting background service…
-backgrounded · 1a5e2450
+backgrounded · 0f51b8d9
   claude agents             list sessions
-  claude attach 1a5e2450    open in this terminal
-  claude logs 1a5e2450      show recent output
-  claude stop 1a5e2450      stop this session
-probe1=confirmed (session 1a5e2450)
-cleanup=verified (1a5e2450 absent)
+  claude attach 0f51b8d9    open in this terminal
+  claude logs 0f51b8d9      show recent output
+  claude stop 0f51b8d9      stop this session
+probe1=confirmed (session 0f51b8d9)
+cleanup=verified (0f51b8d9 absent)
 $ echo $?
 0
 ```
@@ -493,6 +519,8 @@ on demand, and a script that only ever passes proves nothing:
 | clusters no longer engage `--print` | `PROBE 2 CHANGED`, exit 1 |
 | `--` honoured, no session starts | `PROBE 1 CHANGED`, exit 1 |
 | `stop` silently fails | `CLEANUP FAILED: session … still present`, exit 1 |
+| `agents --json` itself fails | `CLEANUP UNVERIFIED: agents --json failed`, exit 1 |
+| probe 1 exits non-zero but still prints an id | `PROBE 1 CHANGED: expected exit 0, got 3`, exit 1 |
 | version `2.1.226junk`, `2.1`, or `2.1.226-beta.1` | rejected, exit 1 |
 | version `2.1.226` | accepted |
 
