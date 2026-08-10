@@ -288,49 +288,61 @@ downgrade, or a pinned version moving underneath you. This section carries its
 own trigger and the full procedure; nothing elsewhere needs to point at it for
 it to be run.
 
-#### Step 0 — bind the version before probing anything
+#### Step 0 — pin the CLI under test, then read its version
 
-Read the operational version and hold it in a variable, then use that variable
-in every probe below. Do not type a version literal and do not use `@latest`:
+Choose the CLI **once**, into a variable, and use that variable for every
+command in this procedure — probes, cleanup, and read-back alike:
 
 ```bash
-VERSION="$(claude --version | awk '{print $1}')"   # e.g. 2.1.226
-echo "$VERSION"                                    # record this exact value
+# (a) the version already in use -- the ordinary case after an upgrade
+CLAUDE=("$(command -v claude)")
+
+# (b) or a candidate, before adopting it
+CANDIDATE=2.1.230                                    # the version being evaluated
+CLAUDE=(npx -y @anthropic-ai/claude-code@"$CANDIDATE")
 ```
 
-This is the step that keeps the log honest. `<version>` written by hand can name
-one version while the binary under test is another, and the record would look
-complete either way. Binding it once means the version you log and the version
-you probed cannot diverge.
+Then read the version **from that exact CLI**, and record both halves:
 
-Two forms, and the difference matters:
+```bash
+VERSION="$("${CLAUDE[@]}" --version | awk '{print $1}')"
+printf 'cli=%s version=%s\n' "${CLAUDE[*]}" "$VERSION"
+```
 
-- **Probing the version already in use** — the ordinary case after an upgrade.
-  Probe the installed binary directly (`claude ...`), because the operational
-  binary is the thing whose behaviour the wrapper depends on.
-- **Probing a version before adopting it** — use the `npx` form below with
-  `@"$VERSION"` set to the candidate, and say so in the log entry.
+Pinning the invocation, not just the version string, is what makes the record
+trustworthy. A version captured once into `$VERSION` while later commands say
+plain `claude` records a lookup, not a control: a `PATH` change or an update
+landing mid-procedure would test one binary and log another, and the entry would
+look complete either way. `"${CLAUDE[@]}"` is the thing that actually decides
+which binary runs, which is why the log records the invocation alongside the
+version.
+
+Route (a) resolves to an absolute path deliberately — `command -v` is evaluated
+once, so a later `PATH` change cannot redirect the probes mid-run.
 
 #### Probe 1 — does `--` still fail to end option parsing?
 
 ```bash
-# installed binary:
-claude --plugin-dir "$PWD/dev/plugins/mattpocock-skills" -- --bg
-# or, for a candidate version:
-npx -y @anthropic-ai/claude-code@"$VERSION" \
-  --plugin-dir "$PWD/dev/plugins/mattpocock-skills" -- --bg
+"${CLAUDE[@]}" --plugin-dir "$PWD/dev/plugins/mattpocock-skills" -- --bg
 ```
 
 Expect a background session to start (`backgrounded · <id>`), which is what
 makes continuing to scan past the marker correct.
 
 This probe **starts a real background session.** Stop it, then confirm it is
-actually gone:
+actually gone — through the **same** CLI that started it:
 
 ```bash
-claude stop <id>        # the id from the "backgrounded · <id>" line
-claude agents --json    # expect: no session with that id
+"${CLAUDE[@]}" stop <id>        # the id from the "backgrounded · <id>" line
+"${CLAUDE[@]}" agents --json    # expect: no session with that id
 ```
+
+Do not stop a candidate's session with the installed `claude`, or the reverse.
+Session management is a contract between a CLI and the sessions it created, and
+this procedure has no evidence that the contract is stable across versions —
+which is the whole premise of the section. Mixing them risks a stop that appears
+to succeed while the session survives, and the cleanup check would not catch it,
+because it too would be asking the wrong CLI.
 
 `claude stop` is absent from `claude --help`'s command list but is real — see
 "`claude --help` is not the authoritative flag surface" below, which is the
@@ -341,18 +353,31 @@ stopped session apart from one that was never cleaned up.
 #### Probe 2 — do clustered short flags still engage `--print`?
 
 ```bash
-claude -pd "say ok"                                # installed binary
-npx -y @anthropic-ai/claude-code@"$VERSION" -pd "say ok"   # or a candidate
+out="$("${CLAUDE[@]}" -pd "say ok" 2>&1)"; status=$?
+printf '%s\n' "$out" | grep -v '^Permission deny rule'
+printf 'exit=%s\n' "$status"
 ```
 
 Expect `Error: Input must be provided either through stdin or as a prompt
-argument when using --print`. No session starts, so there is nothing to clean
-up.
+argument when using --print`, and `exit=1`. No session starts, so there is
+nothing to clean up.
 
-In a repository whose `.claude/settings.json` carries `Write(...)` deny rules,
-this prints a "not matched by file permission checks" warning per rule first.
-That is unrelated noise — filter with `grep -v '^Permission deny rule'` to see
-the probe's own output.
+Capture the output and status **before** filtering. In a repository whose
+`.claude/settings.json` carries `Write(...)` deny rules, this probe prints a
+"not matched by file permission checks" warning per rule ahead of its own
+output, and filtering them out is what makes the result readable. But the
+obvious form —
+
+```bash
+"${CLAUDE[@]}" -pd "say ok" 2>&1 | grep -v '^Permission deny rule'   # WRONG
+```
+
+— reports `grep`'s status, not Claude's. Measured here: Claude exits 1 while
+that pipeline reports 0, so the exit code silently inverts from "the probe
+failed as expected" to "everything was fine". `set -o pipefail` or
+`${PIPESTATUS[0]}` also work; capture-then-filter is used above because it keeps
+the status and the filtered output independent of shell options that a reader
+may not have set.
 
 #### Record every run
 
@@ -374,15 +399,19 @@ confirmed against 2.1.226. Treated as the baseline, not as a reproducible record
 **2026-08-10 — 2.1.226 — probe 2 confirmed, probe 1 not re-run**
 
 Not triggered by a version change. Ran while establishing this procedure, to
-check the recorded outcomes still held.
+check the recorded outcomes still held. Route (a), the installed binary.
 
 ```
-$ claude --version
-2.1.226 (Claude Code)
+$ CLAUDE=("$(command -v claude)")
+$ VERSION="$("${CLAUDE[@]}" --version | awk '{print $1}')"
+$ printf 'cli=%s version=%s\n' "${CLAUDE[*]}" "$VERSION"
+cli=/opt/node22/bin/claude version=2.1.226
 
-$ claude -pd "say ok" 2>&1 | grep -v '^Permission deny rule'
+$ out="$("${CLAUDE[@]}" -pd "say ok" 2>&1)"; status=$?
+$ printf '%s\n' "$out" | grep -v '^Permission deny rule'
 Error: Input must be provided either through stdin or as a prompt argument when using --print
-(exit 1)
+$ printf 'exit=%s\n' "$status"
+exit=1
 ```
 
 Probe 1 was deliberately not re-run: it starts a real background session, and
