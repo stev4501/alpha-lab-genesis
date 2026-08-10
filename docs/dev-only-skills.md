@@ -283,9 +283,9 @@ The unit tests run against a stubbed `CLAUDE_BIN` and therefore **cannot** prove
 anything about Claude's parser. Two behaviours the wrapper depends on are
 properties of the CLI, not of this repository.
 
-**Currently verified: 2.1.226** — probe 1 (`--` not honoured) on 2026-08-08,
-probe 2 (clusters engage `--print`) on 2026-08-10. Update this line on every
-run; the run log at the end of the section holds the history behind it.
+**Currently verified: 2.1.226** — both probes confirmed on 2026-08-10, by a
+whole-script run against the operational CLI. Update this line on every run; the
+run log at the end of the section holds the history behind it.
 
 **Trigger:** any change to the operational Claude Code version — an upgrade, a
 downgrade, or a pinned version moving underneath you. This section carries its
@@ -416,6 +416,12 @@ from one that was never cleaned up. `claude stop` is absent from
 `claude --help`'s command list but is real — see "`claude --help` is not the
 authoritative flag surface" below, the same trap in a different place.
 
+The absence check deliberately reads `agents --json`, not `agents --json --all`.
+A stopped session is *finished*, not erased — `claude stop` keeps its
+conversation so it can be reopened with `claude attach <id>` — so the stopped id
+still appears under `--all` as a completed session. That is a successful
+cleanup, not a failed one. Checking with `--all` would never pass.
+
 #### Run log
 
 Append an entry on every run, including runs where nothing changed, and
@@ -439,11 +445,11 @@ format, so the exact commands were not preserved; both behaviours were reported
 confirmed against 2.1.226. It is a reference entry, not a reproducible record —
 the first entry meeting the format in full is the one below.
 
-**2026-08-10 — 2.1.226 — probe 2 confirmed against the CLI; probe 1 not re-run**
+**2026-08-10 — 2.1.226 — both probes confirmed, cleanup verified**
 
-Not triggered by a version change. Ran while establishing this procedure, to
-check the recorded outcomes still held. The script was extracted verbatim from
-this document rather than retyped, so what was tested is what is published:
+Not triggered by a version change; run while establishing this procedure. The
+script was extracted verbatim from this document rather than retyped, so what
+was tested is what is published:
 
 ```bash
 python3 -c "
@@ -454,49 +460,49 @@ print(re.findall(r'\`\`\`bash\\n(.*?)\`\`\`', s, re.S)[0])
 " > probe.sh
 ```
 
-**Against the real CLI**, the script was run with probe 1's block removed,
-because probe 1 starts a real background session and no version change
-justified one:
+Run whole against the operational CLI, probe 1 included:
 
 ```
+$ bash probe.sh
 binary=/opt/node22/bin/claude version=2.1.226
 Error: Input must be provided either through stdin or as a prompt argument when using --print
 probe2=confirmed
+Starting background service…
+backgrounded · 1a5e2450
+  claude agents             list sessions
+  claude attach 1a5e2450    open in this terminal
+  claude logs 1a5e2450      show recent output
+  claude stop 1a5e2450      stop this session
+probe1=confirmed (session 1a5e2450)
+cleanup=verified (1a5e2450 absent)
+$ echo $?
+0
 ```
 
-**Against a stub CLI**, the script was run whole — the technique
-`tests/test_dev_session.py` already uses — to exercise the paths the real run
-skipped: probe 1's session-id capture, the `EXIT` trap, the stop, and the
-absence check.
+Cleanup was confirmed a second time, from outside the script: `claude agents
+--json` afterwards listed only the operator's own interactive session, with no
+trace of `1a5e2450`. Under `--all` the id does still appear, as a *completed*
+session — that is the expected result described above, not a leak.
 
-```
-binary=<stub>/claude version=2.1.226
-probe2=confirmed
-backgrounded · sess-abc123
-probe1=confirmed (session sess-abc123)
-cleanup=verified (sess-abc123 absent)
-exit=0
-```
-
-Its fail-closed behaviour was checked by making the stub misbehave, since a
-script that only ever passes proves nothing:
+Before this entry the fail-closed logic had only ever run against a stub. That
+check is still worth keeping, because a real run cannot make the CLI misbehave
+on demand, and a script that only ever passes proves nothing:
 
 | Stub behaviour | Result |
 | :--- | :--- |
 | clusters no longer engage `--print` | `PROBE 2 CHANGED`, exit 1 |
 | `--` honoured, no session starts | `PROBE 1 CHANGED`, exit 1 |
 | `stop` silently fails | `CLEANUP FAILED: session … still present`, exit 1 |
-| version reads `2.1.226junk`, `2.1`, or `2.1.226-beta.1` | rejected, exit 1 |
-| version reads `2.1.226` | accepted |
+| version `2.1.226junk`, `2.1`, or `2.1.226-beta.1` | rejected, exit 1 |
+| version `2.1.226` | accepted |
 
-What this run does **not** establish: probe 1 against the real CLI. Its logic is
-exercised only against the stub, so the first operator to run this under a real
-trigger is the first to start and stop an actual session through it. The
-`Currently verified` line therefore still credits probe 1 to 2026-08-08.
+The stub is the technique `tests/test_dev_session.py` already uses. Reproduce it
+by putting a fake `claude` earlier on `PATH` than the real one.
 
 Also confirmed in the same run, since cleanup depends on it: `claude stop <id>`
-exists at 2.1.226 (`Usage: claude stop <id>`), despite being absent from
-`claude --help`'s command list.
+exists at 2.1.226, despite being absent from `claude --help`'s command list. The
+background session's own start-up text advertises it, which is a second place
+the help output is not the authority.
 
 #### If either outcome changes
 
