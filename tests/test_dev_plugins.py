@@ -100,6 +100,18 @@ class TestDevPluginsStayOutOfAutonomousSessions(unittest.TestCase):
             ".claude/skills/ exists: skills placed there load into autonomous sessions too",
         )
 
+    def test_cloud_environment_is_the_only_supported_delivery_route(self):
+        self.assertFalse(
+            (ROOT / "bin" / "dev-session").exists(),
+            "local dev-session wrapper was reintroduced without a supported caller",
+        )
+        documentation = (ROOT / "docs" / "dev-only-skills.md").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("Supported route", documentation)
+        self.assertIn("Alpha Lab Dev", documentation)
+        self.assertNotIn("bin/dev-session", documentation)
+
     def test_declaring_plugins_requires_the_runner_controls(self):
         """If project settings ever declare a plugin, the runner must strip skills.
 
